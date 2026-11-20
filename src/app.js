@@ -1,6 +1,7 @@
 import {matchRecords,normalizeName,SOURCES} from './normalize.js';
 import {clearResponseCache,purgeExpiredCache,cachedResponseCount} from './adapters/common.js';
 import {csvContent,jsonContent} from './export.js';
+window.RI_CONFIG ||= {apiBase:'https://ransom-intel-api.yanthegreat99.workers.dev'};
 const $=s=>document.querySelector(s),form=$('#search-form'),q=$('#query');purgeExpiredCache();let all=[],groups=[],page=0,lastQuery='',lastExact=false,lastSearch=null;const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function toast(s){const t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2600)}
 function statusUI(states){$('#statuses').innerHTML=SOURCES.map(n=>{const x=states?.[n]||{state:'ready',label:'READY',count:null};return `<div class="status-card"><span class="status-name">${esc(n)}</span><span class="status-state ${x.state==='ok'?'ok':x.state==='error'?'error':''}">${esc(x.label)}${x.count!==null&&x.count!==undefined?` · ${x.count}`:''}</span></div>`}).join('')}
