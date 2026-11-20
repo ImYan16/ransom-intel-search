@@ -2,6 +2,9 @@
 
 Static GitHub Pages frontend with a small Cloudflare Worker API proxy. The browser calls only the Worker; the Worker queries RansomLook, RansomFeed, and Ransomware.live Pro concurrently. The Pro key is stored as an encrypted Worker secret and is never sent to the frontend.
 
+Live portal: https://imyan16.github.io/ransom-intel-search/  
+Worker health: https://ransom-intel-api.yanthegreat99.workers.dev/api/health
+
 ## Why the Worker is needed
 
 Live checks on 20 Nov 2026 found the upstream APIs did not return the CORS headers required by GitHub Pages. The Worker makes server-side requests to those APIs and returns data to the Pages origin with a controlled CORS policy. This is the only backend component; there is no database, ingestion job, or scheduled polling.
