@@ -1,29 +1,162 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#09111c"><title>Ransom Intel | Victim search</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1118">
+  <meta name="description" content="Search public ransomware victim claims across independent reporting sources.">
+  <title>Ransom Intel — Victim claims</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <header class="topbar"><a class="brand" href="#"><span class="brand-mark">RI</span><span>RANSOM INTEL<small>VICTIM CLAIM SEARCH</small></span></a><div class="top-actions"><div class="top-right"><span class="live-dot"></span> SECURE PROXY <span class="divider">|</span> <span id="clock">READY</span></div><button id="open-settings" class="button secondary">⚙ SETTINGS</button></div></header>
-  <main>
-    <section class="hero"><div class="eyebrow">MULTI-SOURCE THREAT INTELLIGENCE</div><h1>Search victim claims</h1><p class="subtitle">Search public ransomware reporting sources. A group’s post is an unverified claim, not confirmation of intrusion.</p>
-      <form id="search-form"><div class="search-box"><span class="search-icon">⌕</span><input id="query" name="query" minlength="2" maxlength="120" placeholder="Organisation, domain, victim, or threat group…" autocomplete="off" required><button type="submit" id="search-button">SEARCH <span>↗</span></button></div>
-      <div class="search-options"><label class="check"><input id="exact" type="checkbox"><span>Exact victim name</span></label><span class="hint">At least 2 characters · max 120</span></div>
-      </form>
-      <div class="source-row"><div class="source-chip"><i></i> RansomLook</div><div class="source-chip"><i></i> RansomFeed</div><div class="source-chip"><i></i> Ransomware.live Pro</div></div>
+  <a class="skip-link" href="#main-content">Skip to search</a>
+
+  <header id="top" class="site-header">
+    <a class="brand" href="#top" aria-label="Ransom Intel home">
+      <span class="brand-mark" aria-hidden="true">RI</span>
+      <span class="brand-copy">Ransom Intel<small>Victim claim search</small></span>
+    </a>
+    <nav class="primary-nav" aria-label="Primary">
+      <a href="#search">Search</a>
+      <a href="#results-heading">Results</a>
+    </nav>
+    <div class="header-actions">
+      <span class="service-state"><span class="service-indicator" aria-hidden="true"></span>Worker proxy</span>
+      <button id="open-settings" class="button button-quiet" type="button" aria-haspopup="dialog" aria-controls="settings-dialog">
+        <span class="button-icon" aria-hidden="true">⚙</span><span>Settings</span>
+      </button>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section id="search" class="search-section" aria-labelledby="page-title">
+      <div class="intro-copy">
+        <p class="eyebrow">Public reporting · three independent sources</p>
+        <h1 id="page-title">Search victim claims</h1>
+        <p class="intro-text">Find reported ransomware victim claims, compare source records, and review their provenance.</p>
+      </div>
+
+      <search class="search-module" aria-label="Search public ransomware claims">
+        <form id="search-form">
+          <label class="visually-hidden" for="query">Organisation, domain, victim, or threat group</label>
+          <div class="search-control">
+            <span class="search-icon" aria-hidden="true">⌕</span>
+            <input id="query" name="query" type="search" minlength="2" maxlength="120" placeholder="Search an organisation, domain, or threat group" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="search-hint" required>
+            <button id="search-button" class="button button-primary" type="submit">Search <span aria-hidden="true">↗</span></button>
+          </div>
+          <div class="search-options">
+            <label class="check-control"><input id="exact" name="exact" type="checkbox"><span>Exact victim name</span></label>
+            <span id="search-hint" class="field-hint">2–120 characters</span>
+          </div>
+        </form>
+      </search>
+
+      <p class="claim-note"><span class="note-mark" aria-hidden="true">i</span><span>A group’s post is an unverified claim, not confirmation of an intrusion.</span></p>
     </section>
-    <section class="status-grid" id="statuses" aria-live="polite"></section>
-    <section class="results-area"><div class="results-heading"><div><div class="eyebrow">INTELLIGENCE RESULTS</div><h2 id="result-title">Awaiting search</h2><div id="search-meta" class="subline"></div></div><div class="actions"><button class="button secondary" id="refresh-search" disabled>↻ FORCE REFRESH</button><button class="button secondary" id="export-csv" disabled>↓ CSV</button><button class="button secondary" id="export-json" disabled>{ } JSON</button></div></div>
-      <div class="toolbar"><div class="filters"><select id="source-filter"><option value="all">All sources</option><option>RansomLook</option><option>RansomFeed</option><option>Ransomware.live Pro</option></select><select id="country-filter"><option value="all">All countries</option></select><select id="group-filter"><option value="all">All groups</option></select><select id="industry-filter"><option value="all">All industries</option></select><input id="date-from" type="date" aria-label="Date from"><input id="date-to" type="date" aria-label="Date to"><select id="duplicate-filter"><option value="all">All match statuses</option><option value="unique">Unique</option><option value="exact">Exact match</option><option value="high">High confidence</option><option value="possible">Possible match</option></select><select id="sort"><option value="relevance">Sort: relevance</option><option value="newest">Discovery: newest</option><option value="victim">Victim: A–Z</option></select><label class="check"><input id="with-screenshot" type="checkbox"><span>With evidence</span></label><label class="check"><input id="with-website" type="checkbox"><span>With website</span></label><select id="page-size"><option>25</option><option>50</option><option>100</option></select><button id="reset-filters" class="button secondary">Clear filters</button><button id="reset-search" class="button secondary">Reset search</button></div><div id="result-count" class="count">0 records</div></div>
-      <div class="table-wrap"><table><thead><tr><th>VICTIM</th><th>ATTACK DATE</th><th>DISCOVERED</th><th>THREAT GROUP</th><th>COUNTRY</th><th>INDUSTRY</th><th>SOURCES</th><th>MATCH</th></tr></thead><tbody id="results"><tr><td colspan="8" class="empty">Enter a search term to query all configured sources.</td></tr></tbody></table></div>
-      <div class="pagination"><span id="page-info">—</span><div><button id="prev" class="button secondary" disabled>← Previous</button><button id="next" class="button secondary" disabled>Next →</button></div></div>
+
+    <section class="source-status" aria-labelledby="source-heading" aria-live="polite">
+      <div class="section-kicker"><h2 id="source-heading">Source status</h2><span>Independent responses</span></div>
+      <div id="statuses" class="status-grid"></div>
     </section>
-    <footer>Data reflects reports and claims as recorded by each source. Dates retain their source meaning; publication or discovery dates are not confirmed intrusion dates.</footer>
+
+    <section class="results-panel" aria-labelledby="results-heading">
+      <header class="results-header">
+        <div class="results-title-block">
+          <p class="eyebrow">Search workspace</p>
+          <h2 id="results-heading" aria-live="polite">Ready when you are</h2>
+          <p id="search-meta" class="results-meta">Enter a term to search the configured sources.</p>
+        </div>
+        <div class="results-actions" aria-label="Result actions">
+          <button id="refresh-search" class="button button-secondary" type="button" disabled>Refresh</button>
+          <button id="export-csv" class="button button-secondary" type="button" disabled>Export CSV</button>
+          <button id="export-json" class="button button-secondary" type="button" disabled>Export JSON</button>
+          <button id="reset-search" class="button button-quiet" type="button">Clear search</button>
+        </div>
+      </header>
+
+      <div class="results-toolbar">
+        <div class="toolbar-primary" role="group" aria-label="Primary result controls">
+          <label class="control-field"><span>Source</span><select id="source-filter" name="source"><option value="all">All sources</option><option>RansomLook</option><option>RansomFeed</option><option>Ransomware.live Pro</option></select></label>
+          <label class="control-field"><span>Sort by</span><select id="sort" name="sort"><option value="relevance">Relevance</option><option value="newest">Discovery date · newest</option><option value="victim">Victim name · A–Z</option></select></label>
+          <label class="control-field page-size-field"><span>Rows</span><select id="page-size" name="page-size"><option>25</option><option>50</option><option>100</option></select></label>
+        </div>
+
+        <details id="filter-panel" class="filter-panel">
+          <summary><span class="filter-summary-icon" aria-hidden="true">☷</span>More filters <span id="active-filter-count" class="filter-count">0 active</span></summary>
+          <div class="filter-content">
+            <div class="filter-grid">
+              <label class="control-field"><span>Country</span><select id="country-filter" name="country"><option value="all">All countries</option></select></label>
+              <label class="control-field"><span>Threat group</span><select id="group-filter" name="group"><option value="all">All groups</option></select></label>
+              <label class="control-field"><span>Industry</span><select id="industry-filter" name="industry"><option value="all">All industries</option></select></label>
+              <label class="control-field"><span>Match status</span><select id="duplicate-filter" name="match-status"><option value="all">All statuses</option><option value="unique">Unique</option><option value="exact">Exact match</option><option value="high">High confidence</option><option value="possible">Possible match</option></select></label>
+              <label class="control-field"><span>From date</span><input id="date-from" name="date-from" type="date"></label>
+              <label class="control-field"><span>To date</span><input id="date-to" name="date-to" type="date"></label>
+            </div>
+            <div class="filter-footer">
+              <div class="filter-toggles">
+                <label class="check-control"><input id="with-screenshot" name="with-evidence" type="checkbox"><span>Has evidence</span></label>
+                <label class="check-control"><input id="with-website" name="with-website" type="checkbox"><span>Has website</span></label>
+              </div>
+              <button id="reset-filters" class="button button-quiet" type="button" disabled>Clear filters</button>
+            </div>
+          </div>
+        </details>
+        <p id="result-count" class="result-count" aria-live="polite">0 source records</p>
+      </div>
+
+      <p class="table-hint">On smaller screens, scroll the table horizontally to view all fields.</p>
+      <div id="table-wrap" class="table-wrap" role="region" aria-label="Search results table" tabindex="0" aria-busy="false">
+        <table>
+          <caption class="visually-hidden">Ransomware victim claims matching the current search and filters</caption>
+          <thead><tr><th scope="col">Victim</th><th scope="col">Attack date</th><th scope="col">Discovered</th><th scope="col">Threat group</th><th scope="col">Country</th><th scope="col">Industry</th><th scope="col">Sources</th><th scope="col">Match</th></tr></thead>
+          <tbody id="results"><tr><td colspan="8" class="empty-cell"><span class="empty-symbol" aria-hidden="true">⌕</span><strong>Search public reporting: </strong><span> Results from each source will appear here.</span></td></tr></tbody>
+        </table>
+      </div>
+      <nav class="pagination" aria-label="Result pages">
+        <span id="page-info">No results yet</span>
+        <div class="pagination-actions"><button id="prev" class="button button-secondary" type="button" disabled><span aria-hidden="true">←</span> Previous</button><button id="next" class="button button-secondary" type="button" disabled>Next <span aria-hidden="true">→</span></button></div>
+      </nav>
+    </section>
+
+    <footer class="site-footer">
+      <span>Ransom Intel</span>
+      <p>Dates retain their source meaning. Publication or discovery dates are not confirmed intrusion dates.</p>
+    </footer>
   </main>
-  <dialog id="detail-dialog"><form method="dialog"><button class="close" aria-label="Close">×</button></form><div id="detail-content"></div></dialog>
-  <dialog id="settings-dialog"><form method="dialog"><button class="close" aria-label="Close">×</button></form><div class="eyebrow">WORKER SETTINGS</div><h2>Proxy settings</h2><section class="detail-section"><h3>Cloudflare Worker</h3><p class="warning">The Ransomware.live Pro key is configured as an encrypted Cloudflare Worker secret. The key is never stored in or sent from this browser.</p><div class="actions"><button id="test-key" class="button secondary">Test Worker connection</button><button id="clear-key" class="button secondary">Clear legacy browser key</button></div><div id="key-status" class="subline"></div></section><section class="detail-section"><h3>Temporary browser cache</h3><div class="field"><label for="cache-minutes">Cache duration (minutes)</label><input id="cache-minutes" type="number" min="0" max="60" value="5"></div><div class="actions"><button id="save-cache" class="button">Save duration</button><button id="clear-cache" class="button secondary">Clear cached responses</button></div><div id="cache-status" class="subline"></div></section><section class="detail-section"><h3>Search defaults</h3><div class="field"><label for="default-page-size">Results per page</label><select id="default-page-size"><option>25</option><option>50</option><option>100</option></select></div><div class="field"><label for="default-sort">Default sorting</label><select id="default-sort"><option value="relevance">Relevance</option><option value="newest">Discovery newest</option><option value="victim">Victim A–Z</option></select></div></section></dialog>
-  <div id="toast" role="status"></div>
+
+  <dialog id="detail-dialog" aria-labelledby="detail-dialog-title">
+    <form method="dialog" class="dialog-close-form"><button class="dialog-close" aria-label="Close victim details">×</button></form>
+    <div id="detail-content"></div>
+  </dialog>
+
+  <dialog id="settings-dialog" aria-labelledby="settings-title">
+    <form method="dialog" class="dialog-close-form"><button class="dialog-close" aria-label="Close settings">×</button></form>
+    <p class="eyebrow">Configuration</p><h2 id="settings-title" class="dialog-title">Settings</h2>
+    <section class="settings-section" aria-labelledby="worker-title">
+      <h3 id="worker-title">Worker connection</h3>
+      <p class="settings-copy">The API key stays encrypted in Cloudflare. This browser only calls your Worker.</p>
+      <button id="test-key" class="button button-secondary" type="button">Test Worker connection</button>
+      <button id="clear-key" class="button button-quiet" type="button">Clear legacy browser key</button>
+      <p id="key-status" class="inline-status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="settings-section" aria-labelledby="cache-title">
+      <h3 id="cache-title">Temporary browser cache</h3>
+      <p class="settings-copy">Keep successful source responses in this browser for faster repeat searches.</p>
+      <label class="control-field settings-field"><span>Cache duration (minutes)</span><input id="cache-minutes" type="number" min="0" max="60" value="5"></label>
+      <div class="settings-actions"><button id="save-cache" class="button button-primary" type="button">Save duration</button><button id="clear-cache" class="button button-secondary" type="button">Clear cached responses</button></div>
+      <p id="cache-status" class="inline-status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="settings-section" aria-labelledby="defaults-title">
+      <h3 id="defaults-title">Search defaults</h3>
+      <label class="control-field settings-field"><span>Results per page</span><select id="default-page-size"><option>25</option><option>50</option><option>100</option></select></label>
+      <label class="control-field settings-field"><span>Default sorting</span><select id="default-sort"><option value="relevance">Relevance</option><option value="newest">Discovery date · newest</option><option value="victim">Victim name · A–Z</option></select></label>
+    </section>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
   <script type="module" src="./src/app.js"></script>
-</body></html>
+</body>
+</html>
