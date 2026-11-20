@@ -1,4 +1,5 @@
 name = "ransom-intel-api"
+account_id = "c6a5ef1b3b5a6d9767243f9e1cfa385c"
 main = "src/index.js"
 compatibility_date = "2026-11-20"
 
