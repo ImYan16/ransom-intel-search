@@ -1,5 +1,8 @@
 import {matchRecords,normalizeName,SOURCES} from './normalize.js';
 import {clearResponseCache,purgeExpiredCache,cachedResponseCount} from './adapters/common.js';
+import {ransomlookAdapter} from './adapters/ransomlookAdapter.js';
+import {ransomfeedAdapter} from './adapters/ransomfeedAdapter.js';
+import {ransomwareLiveAdapter} from './adapters/ransomwareLiveAdapter.js';
 import {csvContent,jsonContent} from './export.js';
 window.RI_CONFIG ||= {apiBase:'https://ransom-intel-api.yanthegreat99.workers.dev'};
 const $=s=>document.querySelector(s),form=$('#search-form'),q=$('#query');purgeExpiredCache();let all=[],groups=[],page=0,lastQuery='',lastExact=false,lastSearch=null;const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
