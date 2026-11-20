@@ -1,0 +1,1 @@
+{"name":"ransom-intel-search","version":"1.0.0","private":true,"type":"module","scripts":{"test":"node --test","build":"node scripts/build.mjs","serve":"python -m http.server 8080"},"engines":{"node":">=20"}}

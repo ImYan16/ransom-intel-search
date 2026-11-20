@@ -1,0 +1,3 @@
+const headers=['victim_name','website','domain','attack_date','discovery_date','publication_date','last_updated','threat_group','country','industry','description','source_name','original_record_url','match_status','screenshot_url','source_record_id'];
+export function csvContent(records,groups){const rows=records.map(r=>{const g=groups.find(x=>x.records.includes(r));return headers.map(k=>k==='match_status'?g?.match_status:r[k]??'')});return '\ufeff'+[headers,...rows].map(row=>row.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\r\n')}
+export function jsonContent(records,groups,search){return JSON.stringify({search,records,groups},null,2)}

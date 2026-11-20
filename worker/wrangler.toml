@@ -1,0 +1,6 @@
+name = "ransom-intel-api"
+main = "src/index.js"
+compatibility_date = "2026-11-20"
+
+[vars]
+ALLOWED_ORIGINS = "http://localhost:8080"

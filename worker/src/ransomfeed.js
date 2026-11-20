@@ -1,0 +1,3 @@
+import {getJson,arrayResponse,normalize} from './shared.js';
+const SOURCE='RansomFeed';
+export async function ransomfeedAdapter(query){const url=`https://api.ransomfeed.it/search/${encodeURIComponent(query)}/offset/1000`;const data=await getJson(url);const xs=arrayResponse(data);if(!xs)throw Object.assign(new Error('Unexpected response schema'),{kind:'invalid'});return xs.map(x=>normalize(x,SOURCE,{name:['victim','name'],website:['website'],country:['country'],industry:['work_sector','sector'],group:['gang'],attack:['date'],description:['description','victim_notes'],screenshot:['screenshot','screen'],url:['url','link'],urlBase:'https://ransomfeed.it',id:['id']})).filter(Boolean)}

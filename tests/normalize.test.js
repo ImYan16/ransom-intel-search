@@ -1,0 +1,10 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {normalizeName,extractDomain,matchRecords} from '../src/normalize.js';
+const rec=(name,source,extra={})=>({victim_name:name,normalized_victim_name:normalizeName(name),source_name:source,domain:null,country:null,threat_group:null,attack_date:null,publication_date:null,...extra});
+test('normalizes whitespace, case and punctuation',()=>assert.equal(normalizeName('  ACME, Inc.  '),'acme inc'));
+test('extracts domains but does not invent them',()=>{assert.equal(extractDomain('https://www.example.org/path'),'example.org');assert.equal(extractDomain('Acme Incorporated'),null)});
+test('same domain is a high confidence match across sources',()=>{const g=matchRecords([rec('Acme LLC','A',{domain:'acme.com'}),rec('Acme Group','B',{domain:'acme.com'})]);assert.equal(g.length,1);assert.equal(g[0].match_status,'exact');assert.equal(g[0].records.length,2)});
+test('similar names alone stay separate and are labeled possible',()=>{const g=matchRecords([rec('Northstar Health','A'),rec('Northstar Healthcare','B')]);assert.equal(g.length,2);assert.ok(g.every(x=>x.match_status==='possible'))});
+test('similarity plus matching metadata is high confidence',()=>{const g=matchRecords([rec('Acme Industries','A',{country:'US'}),rec('Acme Industry','B',{country:'US'})]);assert.equal(g.length,1);assert.equal(g[0].match_status,'high')});
+test('different names and conflicting dates remain separate',()=>{const g=matchRecords([rec('Acme','A',{domain:'a.com',attack_date:'2024-01-01'}),rec('Acme Holdings','B',{domain:'b.com',attack_date:'2025-01-01'})]);assert.equal(g.length,2)});
