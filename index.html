@@ -15,14 +15,13 @@
   <a class="skip-link" href="#main-content">Skip to search</a>
 
   <header id="top" class="site-header">
-    <a class="brand" href="#top" aria-label="Ransom Intel home">
+    <a class="brand" href="#/ransomware" aria-label="Ransomware Intel search home">
       <span class="brand-mark" aria-hidden="true">RI</span>
-      <span class="brand-copy">Ransom Intel<small>Victim claim search</small></span>
+      <span class="brand-copy">Ransom Intel<small id="module-subtitle">Victim claim search</small></span>
     </a>
     <nav class="primary-nav" aria-label="Primary">
-      <a href="#search">Search</a>
-      <a href="#results-heading">Results</a>
-      <button id="open-osint" type="button" class="nav-button">OSINT Investigation</button>
+      <a id="ransomware-nav" href="#/ransomware" aria-current="page">Ransomware Search</a>
+      <a id="open-osint" href="#/osint" class="nav-button" hidden>OSINT Investigation</a>
     </nav>
     <div class="header-actions">
       <span class="service-state"><span class="service-indicator" aria-hidden="true"></span>Worker proxy</span>
@@ -143,39 +142,52 @@
       </header>
 
       <nav class="osint-tabs" aria-label="OSINT sections" role="tablist">
-        <button type="button" role="tab" aria-selected="true" data-osint-tab="overview">Overview</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="new">New Investigation</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="email">Email Intelligence</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="username">Username Intelligence</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="breaches">Breach Intelligence</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="exposure">Infostealer Exposure</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="relationships">Identity Relationships</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="timeline">Investigation Timeline</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="history">Investigation History</button>
-        <button type="button" role="tab" aria-selected="false" data-osint-tab="reports">Reports</button>
+        <button type="button" role="tab" aria-selected="true" tabindex="0" data-osint-tab="new">New Investigation</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="overview">Overview</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="email">Email</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="username">Username</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="breaches">Breaches</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="exposure">Exposure</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="relationships">Relationships</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="timeline">Timeline</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="history">History</button>
+        <button type="button" role="tab" aria-selected="false" tabindex="-1" data-osint-tab="reports">Reports</button>
       </nav>
 
       <div class="osint-workspace">
-        <section id="osint-overview" class="osint-panel" role="tabpanel" aria-labelledby="osint-title">
-          <div class="osint-section-heading"><div><p class="eyebrow">Workspace</p><h2>Investigation overview</h2></div><span id="osint-investigation-id" class="mono-copy">No active investigation</span></div>
-          <div id="osint-summary" class="osint-summary"><article class="metric-card"><span>Status</span><strong>Idle</strong></article></div>
-          <div id="osint-provider-status" class="status-grid"></div>
-        </section>
-
-        <section id="osint-new-panel" class="osint-panel" role="tabpanel" hidden>
+        <section id="osint-new-panel" class="osint-panel" role="tabpanel" aria-labelledby="osint-title">
           <div class="osint-section-heading"><div><p class="eyebrow">Create</p><h2>New investigation</h2></div></div>
+          <div class="osint-lookup">
+            <div>
+              <p class="eyebrow">Live intelligence lookup</p>
+              <h2>Profile an email or username</h2>
+              <p>Run a single-identifier lookup or configure a detailed investigation below.</p>
+            </div>
+            <form id="osint-quick-form" class="osint-quick-form">
+              <label class="visually-hidden" for="osint-quick-input">Email address or username</label>
+              <input id="osint-quick-input" type="text" maxlength="254" placeholder="name@example.com or @username" autocomplete="off" required>
+              <button class="button button-primary" type="submit">Start lookup</button>
+            </form>
+          </div>
           <form id="osint-form" class="osint-form">
-            <label class="control-field osint-wide"><span>Identifiers</span><textarea id="osint-identifiers" rows="5" placeholder="analyst@example.com&#10;username123&#10;second@example.org" aria-describedby="osint-input-help"></textarea></label>
-            <p id="osint-input-help" class="field-hint">Enter one email address or username per line. A maximum of 100 identifiers is supported.</p>
-            <div class="osint-form-grid">
-              <fieldset class="provider-options"><legend>Providers</legend>
-                <label class="check-control"><input type="checkbox" name="osint-provider" value="hibp" checked><span>Have I Been Pwned</span></label>
-                <label class="check-control"><input type="checkbox" name="osint-provider" value="dns" checked><span>DNS / MX</span></label>
-                <label class="check-control"><input type="checkbox" name="osint-provider" value="github" checked><span>GitHub public profiles</span></label>
-                <label class="check-control"><input type="checkbox" name="osint-provider" value="maigret"><span>Maigret worker</span></label>
-                <label class="check-control"><input type="checkbox" name="osint-provider" value="infostealer"><span>Infostealer provider</span></label>
-              </fieldset>
-              <label class="control-field"><span>Investigation mode</span><select id="osint-mode"><option value="standard">Standard</option><option value="extended">Extended</option><option value="bulk">Bulk investigation</option></select></label>
+            <div class="investigation-layout">
+              <div class="investigation-inputs">
+                <label class="control-field osint-wide"><span>Identifiers</span><textarea id="osint-identifiers" rows="7" placeholder="analyst@example.com&#10;username123&#10;second@example.org" aria-describedby="osint-input-help"></textarea></label>
+                <p id="osint-input-help" class="field-hint">Enter one email address or username per line. Maximum: 100 identifiers.</p>
+                <label class="control-field osint-wide osint-password-field"><span>Password exposure check</span><input id="osint-password" type="password" autocomplete="off" placeholder="Optional; only a SHA-1 range is sent"><small>Never stored or sent as plaintext.</small></label>
+              </div>
+              <div class="investigation-options">
+                <label class="control-field"><span>Investigation mode</span><select id="osint-mode"><option value="standard">Standard</option><option value="extended">Extended</option><option value="bulk">Bulk investigation</option></select></label>
+                <fieldset class="provider-options"><legend>Intelligence providers</legend>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="dns" checked><span><strong>DNS / MX</strong><small>Free · domain intelligence</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="github" checked><span><strong>GitHub profiles</strong><small>Free · public API</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="breach_catalog" checked><span><strong>Public breach catalog</strong><small>Free · metadata</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="pwned_passwords"><span><strong>Pwned Passwords</strong><small>Free · k-anonymity</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="maigret"><span><strong>Maigret</strong><small>GitHub Actions · no provider key</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="hibp"><span><strong>HIBP account search</strong><small>Requires API key</small></span></label>
+                  <label class="check-control"><input type="checkbox" name="osint-provider" value="infostealer"><span><strong>Infostealer exposure</strong><small>Requires licensed provider</small></span></label>
+                </fieldset>
+              </div>
             </div>
             <input id="osint-import" type="file" accept=".csv,.json,text/csv,application/json" hidden>
             <div class="settings-actions"><button class="button button-secondary" id="osint-import-button" type="button">Import CSV / JSON</button><button class="button button-primary" type="submit">Start investigation</button></div>
@@ -183,10 +195,19 @@
           </form>
         </section>
 
+        <section id="osint-overview" class="osint-panel" role="tabpanel" hidden>
+          <div class="osint-section-heading"><div><p class="eyebrow">Workspace</p><h2>Investigation overview</h2></div><span id="osint-investigation-id" class="mono-copy">No active investigation</span></div>
+          <div id="osint-summary" class="osint-summary"><article class="metric-card"><span>Status</span><strong>Idle</strong></article></div>
+          <div id="osint-context" class="investigation-context-wrap"></div>
+          <div id="osint-assessment"></div>
+          <div id="osint-provider-status" class="status-grid"></div>
+        </section>
+
         <section id="osint-results" class="osint-panel" role="tabpanel" hidden>
           <div class="osint-section-heading"><div><p class="eyebrow">Findings</p><h2 id="osint-results-title">Results</h2></div>
             <div class="results-actions"><button id="osint-export-json" class="button button-secondary" type="button" disabled>Export JSON</button><button id="osint-export-csv" class="button button-secondary" type="button" disabled>Export CSV</button><button id="osint-export-html" class="button button-secondary" type="button" disabled>Export HTML</button><button id="osint-export-pdf" class="button button-secondary" type="button" disabled>Print / PDF</button></div>
           </div>
+          <div id="osint-account-cards" class="account-card-grid"></div>
           <div id="osint-table-wrap" class="table-wrap" tabindex="0" role="region" aria-label="OSINT findings"><table><thead id="osint-table-head"></thead><tbody id="osint-table-body"></tbody></table></div>
         </section>
 
@@ -194,6 +215,7 @@
           <div class="osint-section-heading"><div><p class="eyebrow">Correlated identities</p><h2>Relationship graph</h2></div></div>
           <div id="osint-graph" class="relationship-graph" role="img" aria-label="Investigation relationship graph"><p class="empty-copy">No relationship data yet.</p></div>
         </section>
+
       </div>
     </section>
   </main>
@@ -230,6 +252,16 @@
       <p class="settings-copy">Provider credentials are worker secrets. Secret values are never returned to this browser.</p>
       <button id="osint-provider-refresh" class="button button-secondary" type="button">Check provider configuration</button>
       <div id="osint-provider-settings" class="provider-settings" role="status" aria-live="polite">Not checked</div>
+    </section>
+    <section class="settings-section" aria-labelledby="osint-cost-title">
+      <h3 id="osint-cost-title">Estimated usage and cost</h3>
+      <div class="cost-breakdown">
+        <p><strong>GitHub Pages:</strong> $0 within repository and Pages limits.</p>
+        <p><strong>Cloudflare Workers:</strong> $0 within the free tier; limits can vary by provider and region.</p>
+        <p><strong>GitHub Actions:</strong> $0 within the public-repository or account allowance.</p>
+        <p><strong>DNS, GitHub public API and Pwned Passwords:</strong> $0; provider limits still apply.</p>
+        <p><strong>HIBP account search / infostealer providers:</strong> optional paid or licensed services.</p>
+      </div>
     </section>
   </dialog>
 
