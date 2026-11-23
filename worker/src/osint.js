@@ -3,7 +3,6 @@ const providerCache = new Map();
 
 const iso = () => new Date().toISOString();
 const randomId = () => crypto.randomUUID();
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function cacheGet(key) {
   const entry = providerCache.get(key);
@@ -63,13 +62,84 @@ async function safeJson(url, options, timeoutMs = 12000) {
   return response.json();
 }
 
+async function publicBreachCatalog(email, investigationId) {
+  const domain = email.split('@')[1]?.toLowerCase() || '';
+  const key = 'public-breach-catalog';
+  let breaches = cacheGet(key);
+  try {
+    if (!breaches) {
+      breaches = await safeJson('https://haveibeenpwned.com/api/v3/breaches', {
+        headers: { 'user-agent': 'Ransom-Intel-Search' },
+      });
+      cacheSet(key, breaches, 24 * 60 * 60 * 1000);
+    }
+  } catch (error) {
+    return [providerError(investigationId, 'breach', email, 'Public breach catalogue', error)];
+  }
+  return breaches
+    .filter((breach) => domain && String(breach.Domain || '').toLowerCase() === domain)
+    .map((breach) => providerResult(investigationId, 'breach', email, 'Public breach catalogue', {
+      status: 'FOUND',
+      confidence: 70,
+      source_url: breach.Domain ? `https://${breach.Domain}` : 'https://haveibeenpwned.com/',
+      verification_status: breach.IsVerified ? 'Confirmed by provider' : 'Reported by source',
+      first_seen: breach.BreachDate || null,
+      last_seen: breach.BreachDate || null,
+      metadata: {
+        breach_name: breach.Name,
+        organisation: breach.Title,
+        breach_date: breach.BreachDate || null,
+        published_date: breach.AddedDate || null,
+        data_classes: breach.DataClasses || [],
+        is_verified: !!breach.IsVerified,
+        catalogue_match: 'email domain',
+        email_account_not_verified: true,
+      },
+    }));
+}
+
+async function pwnedPasswords(prefix, suffix, investigationId, identifier) {
+  if (!/^[A-F0-9]{5}$/.test(prefix) || !/^[A-F0-9]{35}$/.test(suffix)) {
+    return providerResult(investigationId, 'password_exposure', identifier, 'HIBP Pwned Passwords', {
+      status: 'DISABLED', confidence: 0, metadata: { reason: 'Password hash range was not supplied' },
+    });
+  }
+  const cacheKey = `pwned-password:${prefix}`;
+  let text = cacheGet(cacheKey);
+  try {
+    if (!text) {
+      const response = await fetch(`https://api.pwnedpasswords.com/range/${prefix}`, {
+        headers: { 'user-agent': 'Ransom-Intel-Search', 'add-padding': 'true' },
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!response.ok) throw Object.assign(new Error(`Provider HTTP ${response.status}`), { status: response.status });
+      text = await response.text();
+      cacheSet(cacheKey, text, 24 * 60 * 60 * 1000);
+    }
+  } catch (error) {
+    return providerError(investigationId, 'password_exposure', identifier, 'HIBP Pwned Passwords', error);
+  }
+  const match = text.split(/\r?\n/).find((line) => line.toUpperCase().startsWith(suffix));
+  if (!match) return providerResult(investigationId, 'password_exposure', identifier, 'HIBP Pwned Passwords', {
+    status: 'NOT_FOUND', confidence: 100, source_url: 'https://haveibeenpwned.com/Passwords',
+    verification_status: 'No matching suffix in provider range',
+    metadata: { k_anonymity: true, full_password_not_sent: true },
+  });
+  const count = Number(match.split(':')[1]?.trim()) || 0;
+  return providerResult(investigationId, 'password_exposure', identifier, 'HIBP Pwned Passwords', {
+    status: 'FOUND', confidence: 100, source_url: 'https://haveibeenpwned.com/Passwords',
+    verification_status: 'Confirmed by provider range',
+    metadata: { exposure_count: count, k_anonymity: true, full_password_not_sent: true },
+  });
+}
+
 function providerError(investigationId, type, identifier, provider, error) {
   const status = error.status === 429 ? 'RATE_LIMITED' : 'ERROR';
   return providerResult(investigationId, type, identifier, provider, { status, confidence: 0, metadata: { error: status === 'RATE_LIMITED' ? 'Rate limited by provider' : 'Provider request failed' } });
 }
 
 async function hibpEmail(email, investigationId, env) {
-  if (!env.HIBP_API_KEY) return providerResult(investigationId, 'breach', email, 'Have I Been Pwned', { status: 'DISABLED', metadata: { reason: 'HIBP_API_KEY is not configured' } });
+  if (!env.HIBP_API_KEY) return providerResult(investigationId, 'breach', email, 'Have I Been Pwned account search', { status: 'DISABLED', metadata: { reason: 'Requires HIBP_API_KEY for account-breach searches' } });
   const cacheKey = `hibp:${email}`;
   let breaches = cacheGet(cacheKey);
   if (!breaches) {
@@ -238,7 +308,9 @@ async function runInvestigation(investigation, env) {
   const jobs = [];
   for (const identifier of identifiers) {
     if (identifier.type === 'email') {
-      if (providers.includes('hibp')) jobs.push({ provider: 'Have I Been Pwned', status: 'running', started_at: iso() });
+      if (providers.includes('hibp')) jobs.push({ provider: 'Have I Been Pwned account search', status: 'running', started_at: iso() });
+      if (providers.includes('breach_catalog')) jobs.push({ provider: 'Public breach catalogue', status: 'running', started_at: iso() });
+      if (providers.includes('pwned_passwords') && investigation.password_hash_prefix && investigation.password_hash_suffix) jobs.push({ provider: 'HIBP Pwned Passwords', status: 'running', started_at: iso() });
       if (providers.includes('dns')) jobs.push({ provider: 'DNS-over-HTTPS', status: 'running', started_at: iso() });
       if (providers.includes('github')) jobs.push({ provider: 'GitHub', status: 'running', started_at: iso() });
       if (providers.includes('infostealer')) jobs.push({ provider: 'Infostealer provider', status: 'running', started_at: iso() });
@@ -267,7 +339,9 @@ async function runInvestigation(investigation, env) {
   await Promise.all(identifiers.flatMap((identifier) => {
     const calls = [];
     if (identifier.type === 'email') {
-      if (providers.includes('hibp')) calls.push(runProvider('Have I Been Pwned', () => hibpEmail(identifier.value, investigation.id, env)));
+      if (providers.includes('hibp')) calls.push(runProvider('Have I Been Pwned account search', () => hibpEmail(identifier.value, investigation.id, env)));
+      if (providers.includes('breach_catalog')) calls.push(runProvider('Public breach catalogue', () => publicBreachCatalog(identifier.value, investigation.id)));
+      if (providers.includes('pwned_passwords') && investigation.password_hash_prefix && investigation.password_hash_suffix) calls.push(runProvider('HIBP Pwned Passwords', () => pwnedPasswords(investigation.password_hash_prefix, investigation.password_hash_suffix, investigation.id, identifier.value)));
       if (providers.includes('dns')) calls.push(runProvider('DNS-over-HTTPS', () => dnsEmail(identifier.value, investigation.id)));
       if (providers.includes('infostealer')) calls.push(runProvider('Infostealer provider', () => hudsonRockEmail(identifier.value, investigation.id, env)));
       if (providers.includes('github')) calls.push(runProvider('GitHub', () => githubUsername(identifier.value.split('@')[0], investigation.id, env)));
@@ -293,11 +367,13 @@ export async function handleOsint(request, env, url, origin, json) {
 
   if (pathname === '/api/osint/providers' && method === 'GET') return json({
     providers: [
-      { name: 'Have I Been Pwned', category: 'Breach intelligence', enabled: !!env.HIBP_API_KEY, configured: !!env.HIBP_API_KEY, status: env.HIBP_API_KEY ? 'ready' : 'disabled' },
-      { name: 'GitHub', category: 'Public profile', enabled: true, configured: true, status: 'ready' },
-      { name: 'DNS-over-HTTPS', category: 'Email domain', enabled: true, configured: true, status: 'ready' },
-      { name: 'Maigret', category: 'Username enumeration', enabled: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, configured: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, status: env.GITHUB_DISPATCH_TOKEN && env.MAIGRET_REPOSITORY ? 'ready' : 'disabled' },
-      { name: 'Infostealer provider', category: 'Exposure metadata', enabled: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, configured: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, status: env.HUDSON_ROCK_API_URL && env.HUDSON_ROCK_API_KEY ? 'ready' : 'unavailable' },
+      { name: 'HIBP Pwned Passwords', category: 'Password range exposure', enabled: true, configured: true, status: 'available', cost: '$0', method: 'K-anonymity SHA-1 range' },
+      { name: 'Public breach catalogue', category: 'Breach metadata', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public catalog metadata' },
+      { name: 'Have I Been Pwned account search', category: 'Breach intelligence', enabled: !!env.HIBP_API_KEY, configured: !!env.HIBP_API_KEY, status: env.HIBP_API_KEY ? 'available' : 'requires_key', cost: 'Paid API subscription', method: 'HIBP API v3' },
+      { name: 'GitHub', category: 'Public profile', enabled: true, configured: true, status: 'available', cost: '$0 public tier', method: 'Public API' },
+      { name: 'DNS-over-HTTPS', category: 'Email domain', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Google DNS JSON' },
+      { name: 'Maigret', category: 'Username enumeration', enabled: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, configured: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, status: env.GITHUB_DISPATCH_TOKEN && env.MAIGRET_REPOSITORY ? 'available' : 'disabled', cost: '$0 within GitHub Actions limits', method: 'GitHub Actions + Python' },
+      { name: 'Infostealer provider', category: 'Exposure metadata', enabled: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, configured: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, status: env.HUDSON_ROCK_API_URL && env.HUDSON_ROCK_API_KEY ? 'available' : 'requires_paid_subscription', cost: 'Optional paid/licensed', method: 'Authorised metadata API' },
     ],
   }, 200, origin, env);
 
@@ -312,9 +388,25 @@ export async function handleOsint(request, env, url, origin, json) {
     }
     if (!identifiers.length) return json({ error: 'Provide at least one valid email address or username' }, 400, origin, env);
     if (identifiers.length > 100) return json({ error: 'Bulk investigations support at most 100 identifiers' }, 400, origin, env);
-    const available = ['hibp', 'dns', 'github', 'maigret', 'infostealer'];
-    const providers = Array.isArray(body.providers) ? [...new Set(body.providers.filter((provider) => available.includes(provider)))] : ['hibp', 'dns', 'github', 'infostealer'];
-    const investigation = { id: randomId(), mode: ['standard', 'extended', 'bulk'].includes(body.mode) ? body.mode : 'standard', status: 'pending', identifiers, providers, provider_jobs: [], results: [], timeline: [], graph: { nodes: [], edges: [] }, evidence: [], created_at: iso(), updated_at: iso(), summary: {} };
+    const available = ['hibp', 'dns', 'github', 'maigret', 'infostealer', 'breach_catalog', 'pwned_passwords'];
+    const providers = Array.isArray(body.providers) ? [...new Set(body.providers.filter((provider) => available.includes(provider)))] : ['dns', 'github', 'breach_catalog'];
+    const investigation = {
+      id: randomId(),
+      mode: ['standard', 'extended', 'bulk'].includes(body.mode) ? body.mode : 'standard',
+      status: 'pending',
+      identifiers,
+      providers,
+      provider_jobs: [],
+      results: [],
+      timeline: [],
+      graph: { nodes: [], edges: [] },
+      evidence: [],
+      created_at: iso(),
+      updated_at: iso(),
+      summary: {},
+      password_hash_prefix: /^[A-F0-9]{5}$/.test(body.password_hash_prefix || '') ? body.password_hash_prefix : null,
+      password_hash_suffix: /^[A-F0-9]{35}$/.test(body.password_hash_suffix || '') ? body.password_hash_suffix : null,
+    };
     investigations.set(investigation.id, investigation);
     await runInvestigation(investigation, env);
     return json(investigation, 201, origin, env);
