@@ -1,6 +1,6 @@
 import './config.js';
 import { matchRecords, normalizeName, SOURCES } from './normalize.js';
-import { clearResponseCache, purgeExpiredCache, cachedResponseCount } from './adapters/common.js';
+import { purgeExpiredCache } from './adapters/common.js';
 import { ransomlookAdapter } from './adapters/ransomlookAdapter.js';
 import { ransomfeedAdapter } from './adapters/ransomfeedAdapter.js';
 import { ransomwareLiveAdapter } from './adapters/ransomwareLiveAdapter.js';
@@ -24,8 +24,8 @@ let lastExact = false;
 let lastSearch = null;
 let toastTimer;
 
-purgeExpiredCache();
 initOsint();
+purgeExpiredCache();
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
@@ -44,7 +44,9 @@ function renderSourceStatus(states = {}) {
     const state = states[name] || { state: 'ready', label: 'Not searched', count: null };
     const resultLabel = state.count === null || state.count === undefined
       ? state.label
-      : `${state.label} · ${state.count}`;
+      : state.count === 0
+        ? `No matching records${state.label === 'Cached' ? ' · cached' : ''}`
+        : `${state.label} · ${state.count}`;
     const errorText = state.message
       ? `<small class="source-error">${escapeHtml(state.message)}</small>`
       : '';
@@ -152,6 +154,7 @@ function renderResults() {
       ? group.records
       : group.records.filter((record) => record.source_name === filters.source);
     const column = (key) => [...new Set(records.map((record) => record[key]).filter(Boolean))].join(' / ') || 'Not available';
+    const sourceCountries = [...new Set(records.map((record) => `${record.source_name}: ${record.country || 'Not available'}`))];
     const sourceCount = new Set(records.map((record) => record.source_name)).size;
     const groupIndex = matchedGroups.indexOf(group);
     return `<tr>
@@ -159,7 +162,7 @@ function renderResults() {
       <td>${formatDate(column('attack_date'))}</td>
       <td>${formatDate(column('discovery_date'))}</td>
       <td>${escapeHtml(column('threat_group'))}</td>
-      <td>${escapeHtml(column('country'))}</td>
+      <td>${sourceCountries.map((value) => `<div class="record-subline">${escapeHtml(value)}</div>`).join('')}</td>
       <td>${escapeHtml(column('industry'))}</td>
       <td><span class="badge">${sourceCount} ${sourceCount === 1 ? 'source' : 'sources'}</span></td>
       <td><span class="badge ${group.match_status === 'possible' ? 'possible' : ''}">${escapeHtml(group.match_status)}</span></td>
@@ -381,29 +384,16 @@ $('#export-csv').addEventListener('click', () => download(
 ));
 
 $('#open-settings').addEventListener('click', () => {
-  $('#cache-minutes').value = localStorage.getItem('ri-cache-minutes') ?? '5';
   $('#default-page-size').value = localStorage.getItem('ri-page-size') ?? '25';
   $('#default-sort').value = localStorage.getItem('ri-sort') ?? 'relevance';
   $('#page-size').value = $('#default-page-size').value;
   $('#sort').value = $('#default-sort').value;
-  $('#cache-status').textContent = `${cachedResponseCount()} cached source responses in this browser.`;
   settingsDialog.showModal();
 });
 $('#test-key').addEventListener('click', () => void testWorkerConnection());
 $('#clear-key').addEventListener('click', () => {
   localStorage.removeItem('ri-api-key');
   setStatusMessage($('#key-status'), 'Legacy browser key removed. Worker credentials are managed in Cloudflare.');
-});
-$('#save-cache').addEventListener('click', () => {
-  const raw = Number($('#cache-minutes').value);
-  const minutes = Math.min(60, Math.max(0, Number.isFinite(raw) ? raw : 0));
-  localStorage.setItem('ri-cache-minutes', String(minutes));
-  $('#cache-minutes').value = String(minutes);
-  setStatusMessage($('#cache-status'), `Cache duration set to ${minutes} minutes.`, 'success');
-});
-$('#clear-cache').addEventListener('click', () => {
-  clearResponseCache();
-  setStatusMessage($('#cache-status'), 'Cached source responses cleared.', 'success');
 });
 $('#default-page-size').addEventListener('change', () => {
   localStorage.setItem('ri-page-size', $('#default-page-size').value);
