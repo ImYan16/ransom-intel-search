@@ -9,3 +9,15 @@ enabled = true
 
 [vars]
 ALLOWED_ORIGINS = "http://localhost:8080,https://imyan16.github.io,https://ransom-intel-search.yanthegreat99.workers.dev"
+
+# Optional free-tier bindings:
+# Create with `wrangler kv namespace create OSINT_CACHE`
+# [[kv_namespaces]]
+# binding = "OSINT_CACHE"
+# id = "<namespace-id>"
+#
+# Create with `wrangler d1 create ransom-intel-osint`
+# [[d1_databases]]
+# binding = "OSINT_DB"
+# database_name = "ransom-intel-osint"
+# database_id = "<database-id>"
