@@ -5,7 +5,7 @@ import {isValidEmail, normalizeUsername} from '../worker/src/osint.js';
 
 const env = {
   ALLOWED_ORIGINS: 'https://analyst.github.io',
-  HIBP_API_KEY: 'hibp-test-secret',
+  HIBP_API_KEY: '00000000000000000000000000000000',
   GITHUB_API_TOKEN: 'github-test-secret',
 };
 const request = (path, method = 'GET', body, origin = 'https://analyst.github.io') => new Request(`https://worker.test${path}`, {
@@ -48,7 +48,7 @@ test('OSINT provider endpoint does not expose secret values', async () => {
   const response = await worker.fetch(request('/api/osint/providers'), env);
   const data = await response.json();
   assert.equal(response.status, 200);
-  assert.equal(JSON.stringify(data).includes('hibp-test-secret'), false);
+  assert.equal(JSON.stringify(data).includes('00000000000000000000000000000000'), false);
   assert.ok(data.providers.some((provider) => provider.name === 'HIBP Pwned Passwords'));
   assert.ok(data.providers.some((provider) => provider.name === 'Have I Been Pwned account search'));
   assert.ok(data.providers.some((provider) => provider.status === 'available'));
