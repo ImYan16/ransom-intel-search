@@ -12,7 +12,7 @@ Live checks on 20 Nov 2026 found the upstream APIs did not return the CORS heade
 ## Source adapters
 
 - **RansomLook:** `GET https://www.ransomlook.io/api/search?query=…`; falls back to observed `q` parameter if the documented parameter is rejected. Maps post title, group, discovery timestamp, optional description, link, and screenshot. Discovery is not an attack date.
-- **RansomFeed:** `GET https://api.ransomfeed.it/search/{term}/offset/1000`. Search includes victim, description, city, region, and sector. Provider documents a 5 requests/minute per-IP rate limit.
+- **RansomFeed:** `GET https://api.ransomfeed.it/search/{term}/offset/1000`. If that API returns no matches, the Worker checks RansomFeed’s public site-search endpoint for newer posts that have not reached the documented API yet. Search includes victim, description, city, region, and sector. The documented API rate limit is 5 requests/minute per IP.
 - **Ransomware.live Pro:** `GET https://api-pro.ransomware.live/victims/search?q=…`, authenticated with `X-API-KEY` from the Worker secret binding.
 
 Missing fields stay null and render as “Not Available”. Attack, discovery, publication, and update dates remain separate. A ransomware group’s post is an unverified claim, not confirmed proof of breach. Source raw responses are retained per record for traceability.
