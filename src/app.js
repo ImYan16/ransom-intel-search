@@ -5,6 +5,7 @@ import { ransomlookAdapter } from './adapters/ransomlookAdapter.js';
 import { ransomfeedAdapter } from './adapters/ransomfeedAdapter.js';
 import { ransomwareLiveAdapter } from './adapters/ransomwareLiveAdapter.js';
 import { csvContent, jsonContent } from './export.js';
+import { initOsint } from './osint.js';
 
 const $ = (selector) => document.querySelector(selector);
 const searchForm = $('#search-form');
@@ -24,6 +25,7 @@ let lastSearch = null;
 let toastTimer;
 
 purgeExpiredCache();
+initOsint();
 
 const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
