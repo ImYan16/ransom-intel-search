@@ -1,8 +1,36 @@
 const investigations = new Map();
 const providerCache = new Map();
+const investigationCreateLimits = new Map();
+const INVESTIGATION_TTL_MS = 24 * 60 * 60 * 1000;
+const MAX_INVESTIGATIONS_PER_MINUTE = 3;
 
 const iso = () => new Date().toISOString();
 const randomId = () => crypto.randomUUID();
+
+function investigationEntry(id) {
+  const entry = investigations.get(id);
+  if (entry && entry.expires_at > Date.now()) return entry;
+  investigations.delete(id);
+  return null;
+}
+
+function hasInvestigationAccess(request, entry) {
+  return request.headers.get('Authorization') === `Bearer ${entry.access_token}`;
+}
+
+function investigationCreationLimited(ip) {
+  const now = Date.now();
+  for (const [key, entry] of investigationCreateLimits) {
+    if (now - entry.started_at >= 60_000) investigationCreateLimits.delete(key);
+  }
+  const entry = investigationCreateLimits.get(ip);
+  if (!entry || now - entry.started_at >= 60_000) {
+    investigationCreateLimits.set(ip, { started_at: now, count: 1 });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > MAX_INVESTIGATIONS_PER_MINUTE;
+}
 
 function cacheGet(key) {
   const entry = providerCache.get(key);
@@ -529,8 +557,6 @@ async function runInvestigation(investigation, env) {
 export async function handleOsint(request, env, url, origin, json) {
   const pathname = url.pathname;
   const method = request.method;
-  const authRequired = env.OSINT_API_TOKEN;
-  if (authRequired && request.headers.get('Authorization') !== `Bearer ${authRequired}`) return json({ error: 'OSINT investigation authentication required' }, 401, origin, env);
 
   if (pathname === '/api/osint/providers' && method === 'GET') return json({
     providers: [
@@ -549,6 +575,12 @@ export async function handleOsint(request, env, url, origin, json) {
   }, 200, origin, env);
 
   if (pathname === '/api/osint/investigations' && method === 'POST') {
+    if (typeof env.OSINT_API_TOKEN !== 'string' || env.OSINT_API_TOKEN.length < 32) {
+      return json({ error: 'OSINT investigation service is not configured with a strong access token' }, 503, origin, env);
+    }
+    if (request.headers.get('X-OSINT-API-TOKEN') !== env.OSINT_API_TOKEN) {
+      return json({ error: 'OSINT investigation authentication required' }, 401, origin, env);
+    }
     let body;
     try { body = await request.json(); } catch { return json({ error: 'Invalid JSON body' }, 400, origin, env); }
     const rawIdentifiers = Array.isArray(body.identifiers) ? body.identifiers : [body.email, body.username].filter(Boolean);
@@ -558,7 +590,13 @@ export async function handleOsint(request, env, url, origin, json) {
       if (identifier && !identifiers.some((item) => item.type === identifier.type && item.value === identifier.value)) identifiers.push(identifier);
     }
     if (!identifiers.length) return json({ error: 'Provide at least one valid email address or username' }, 400, origin, env);
-    if (identifiers.length > 100) return json({ error: 'Bulk investigations support at most 100 identifiers' }, 400, origin, env);
+    if (identifiers.length > 10) return json({ error: 'Bulk investigations support at most 10 identifiers' }, 400, origin, env);
+    if (investigationCreationLimited(request.headers.get('CF-Connecting-IP') || 'unknown')) {
+      return json({ error: 'Investigation rate limit reached. Wait one minute and retry.' }, 429, origin, env);
+    }
+    for (const [id, entry] of investigations) {
+      if (entry.expires_at <= Date.now()) investigations.delete(id);
+    }
     const available = ['hibp', 'dns', 'github', 'maigret', 'infostealer', 'breach_catalog', 'pwned_passwords', 'gravatar', 'rdap', 'certificate', 'wayback'];
     const providers = Array.isArray(body.providers)
       ? [...new Set(body.providers.filter((provider) => available.includes(provider)))]
@@ -580,20 +618,25 @@ export async function handleOsint(request, env, url, origin, json) {
       password_hash_prefix: /^[A-F0-9]{5}$/.test(body.password_hash_prefix || '') ? body.password_hash_prefix : null,
       password_hash_suffix: /^[A-F0-9]{35}$/.test(body.password_hash_suffix || '') ? body.password_hash_suffix : null,
     };
-    investigations.set(investigation.id, investigation);
+    const accessToken = randomId();
+    investigations.set(investigation.id, {
+      investigation,
+      access_token: accessToken,
+      expires_at: Date.now() + INVESTIGATION_TTL_MS,
+    });
     await runInvestigation(investigation, env);
-    return json(investigation, 201, origin, env);
+    return json({ ...investigation, access_token: accessToken }, 201, origin, env);
   }
 
   if (pathname === '/api/osint/investigations' && method === 'GET') {
-    const rows = [...investigations.values()].sort((a, b) => b.created_at.localeCompare(a.created_at));
-    return json({ investigations: rows }, 200, origin, env);
+    return json({ error: 'Investigation listing is disabled; use the private access token returned at creation' }, 405, origin, env);
   }
 
   const match = pathname.match(/^\/api\/osint\/investigations\/([^/]+)(?:\/(status|accounts|breaches|exposures|timeline|graph|evidence|export))?$/);
   if (match) {
-    const investigation = investigations.get(match[1]);
-    if (!investigation) return json({ error: 'Investigation not found' }, 404, origin, env);
+    const entry = investigationEntry(match[1]);
+    if (!entry || !hasInvestigationAccess(request, entry)) return json({ error: 'Investigation not found' }, 404, origin, env);
+    const investigation = entry.investigation;
     const view = match[2];
     if (method === 'DELETE') { investigations.delete(investigation.id); return json({ deleted: true }, 200, origin, env); }
     if (method === 'GET') {
@@ -613,8 +656,9 @@ export async function handleOsint(request, env, url, origin, json) {
     if (!env.MAIGRET_CALLBACK_SECRET || request.headers.get('Authorization') !== `Bearer ${env.MAIGRET_CALLBACK_SECRET}`) return json({ error: 'Invalid Maigret callback authentication' }, 401, origin, env);
     let body;
     try { body = await request.json(); } catch { return json({ error: 'Invalid JSON body' }, 400, origin, env); }
-    const investigation = investigations.get(body.investigation_id);
-    if (!investigation) return json({ error: 'Investigation not found' }, 404, origin, env);
+    const entry = investigationEntry(body.investigation_id);
+    if (!entry) return json({ error: 'Investigation not found' }, 404, origin, env);
+    const investigation = entry.investigation;
     for (const row of Array.isArray(body.results) ? body.results : []) {
       investigation.results.push(providerResult(investigation.id, 'social_account', body.username, 'Maigret', {
         platform: row.platform, display_name: row.display_name || null, profile_url: row.profile_url || null, source_url: row.source_url || row.profile_url || null,
