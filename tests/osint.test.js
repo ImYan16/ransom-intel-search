@@ -21,12 +21,37 @@ test('validates and normalises email and username identifiers', () => {
   assert.equal(normalizeUsername('bad user'), null);
 });
 
+test('Pwned Passwords range check never receives a plaintext password', async () => {
+  const oldFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const parsed = new URL(url);
+    assert.equal(parsed.hostname, 'api.pwnedpasswords.com');
+    assert.equal(parsed.pathname, '/range/00000');
+    return new Response('00000000000000000000000000000000000:4\n', { status: 200 });
+  };
+  try {
+    const response = await worker.fetch(request('/api/osint/investigations', 'POST', {
+      identifiers: ['analyst@example.com'],
+      providers: ['pwned_passwords'],
+      password_hash_prefix: '00000',
+      password_hash_suffix: '00000000000000000000000000000000000',
+    }), env);
+    const data = await response.json();
+    assert.equal(response.status, 201);
+    assert.ok(data.results.some((finding) => finding.source === 'HIBP Pwned Passwords'), JSON.stringify(data));
+  } finally {
+    globalThis.fetch = oldFetch;
+  }
+});
+
 test('OSINT provider endpoint does not expose secret values', async () => {
   const response = await worker.fetch(request('/api/osint/providers'), env);
   const data = await response.json();
   assert.equal(response.status, 200);
   assert.equal(JSON.stringify(data).includes('hibp-test-secret'), false);
-  assert.ok(data.providers.some((provider) => provider.name === 'Have I Been Pwned'));
+  assert.ok(data.providers.some((provider) => provider.name === 'HIBP Pwned Passwords'));
+  assert.ok(data.providers.some((provider) => provider.name === 'Have I Been Pwned account search'));
+  assert.ok(data.providers.some((provider) => provider.status === 'available'));
 });
 
 test('OSINT investigation normalises identifiers and handles provider mocks independently', async () => {
