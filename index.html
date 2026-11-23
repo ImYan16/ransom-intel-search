@@ -172,8 +172,10 @@
           <form id="osint-form" class="osint-form">
             <div class="investigation-layout">
               <div class="investigation-inputs">
+                <label class="control-field osint-wide"><span>Private OSINT access token</span><input id="osint-api-token" name="osint_api_token" type="password" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-describedby="osint-token-help" required></label>
+                <p id="osint-token-help" class="field-hint">Enter the token configured as <code>OSINT_API_TOKEN</code> in Cloudflare. It stays in page memory and is sent only in a request header; never add it to the public app configuration. Case access is lost on reload.</p>
                 <label class="control-field osint-wide"><span>Identifiers</span><textarea id="osint-identifiers" rows="7" placeholder="analyst@example.com&#10;username123&#10;second@example.org" aria-describedby="osint-input-help"></textarea></label>
-                <p id="osint-input-help" class="field-hint">Enter one email address or username per line. Maximum: 100 identifiers.</p>
+                <p id="osint-input-help" class="field-hint">Enter one email address or username per line. Maximum: 10 identifiers.</p>
                 <label class="control-field osint-wide osint-password-field"><span>Password exposure check</span><input id="osint-password" type="password" autocomplete="off" placeholder="Optional; only a SHA-1 range is sent"><small>Never stored or sent as plaintext.</small></label>
               </div>
               <div class="investigation-options">

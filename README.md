@@ -72,16 +72,18 @@ Configure provider credentials with `npx wrangler secret put <NAME> --config wor
 - `MAIGRET_CALLBACK_URL` — reserved callback configuration; callback authentication is not forwarded as a workflow secret in the dispatch payload.
 - `HUDSON_ROCK_API_URL` — optional authorised infostealer metadata API URL.
 - `HUDSON_ROCK_API_KEY` — optional authorised infostealer metadata API key.
-- `OSINT_API_TOKEN` — optional bearer token that protects OSINT investigation endpoints. When set, browser clients must provide it; this is not recommended for public static GitHub Pages unless the same secret is intentionally exposed through a different private client.
+- `OSINT_API_TOKEN` — required secret, at least 32 characters, for creating investigations. Set it with `npx wrangler secret put OSINT_API_TOKEN --config worker/wrangler.toml`, then enter it in the OSINT page. Do not put it in `src/config.js`, HTML, or other public files. Share it only with trusted analysts; anyone who has it can create investigations.
 
-For Maigret, the Worker dispatches `maigret-investigation` through GitHub Actions. The workflow uses the Python package in a hosted runner and uploads private JSON/artifact output for seven days. Because public callback delivery can be credential-expensive and unsafe, the callback endpoint exists for an authorized private integration and the artifact workflow is the documented default alternative. Never put GitHub or provider tokens in `src/config.js` or HTML.
+Each investigation receives a separate random case token. The browser sends that token as a bearer token for case reads, exports, and deletion; it is returned only at creation and kept in page memory. Reloading the page loses access to cases. There is no global case listing, and cases expire after 24 hours (or sooner if the Worker restarts or is redeployed). Creation is limited to three per client IP per minute and ten identifiers per case. Configure this secret and redeploy the Worker before using OSINT.
+
+For Maigret, the Worker dispatches `maigret-investigation` through GitHub Actions. The workflow runs only when the target repository is private, installs the pinned Maigret package from a hash-locked requirements file, and retains the private scan artifact for seven days. Public repositories skip the scan to avoid exposing usernames or results in public workflow logs/artifacts. The callback endpoint is reserved for an authorized private integration. Never put GitHub or provider tokens in `src/config.js` or HTML.
 
 The infostealer module has no synthetic data fallback. It remains unavailable until an authorised API URL and key are configured. Only metadata is accepted; no password, cookie, session token, or raw log fields are displayed or cached.
 
 ### OSINT API namespace
 
 - `POST /api/osint/investigations`
-- `GET /api/osint/investigations`
+- `GET /api/osint/investigations` (disabled; returns 405)
 - `GET /api/osint/investigations/:id`
 - `GET /api/osint/investigations/:id/status`
 - `GET /api/osint/investigations/:id/accounts`
@@ -95,4 +97,4 @@ The infostealer module has no synthetic data fallback. It remains unavailable un
 - `GET /api/osint/providers`
 - `POST /api/osint/maigret/callback`
 
-All provider cache and investigation storage is separate from the ransomware source cache. The Worker currently uses temporary in-memory storage and does not require D1. Persistent history requires a future D1 binding.
+Investigation creation requires `X-OSINT-API-TOKEN`; all case-scoped reads, exports, and deletion require `Authorization: Bearer <case-token>`. Provider discovery is public and does not return credential values. All provider cache and investigation storage is separate from the ransomware source cache. The Worker currently uses temporary in-memory storage and does not require D1. Persistent history requires a future D1 binding.
