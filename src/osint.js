@@ -8,9 +8,22 @@ function apiBase() {
   return window.RI_CONFIG?.apiBase?.replace(/\/$/, '') || '';
 }
 
+const investigationTokens = new Map();
+let osintApiToken = '';
+
 function request(path, options = {}) {
   if (!apiBase()) return Promise.reject(Object.assign(new Error('Worker not configured'), { kind: 'config' }));
-  return fetch(`${apiBase()}${path}`, { ...options, headers: { accept: 'application/json', ...(options.headers || {}) } }).then(async (response) => {
+  const headers = { accept: 'application/json', ...(options.headers || {}) };
+  if (path === '/api/osint/investigations' && options.method === 'POST') {
+    if (!osintApiToken) return Promise.reject(Object.assign(new Error('Enter the private OSINT access token configured in the Worker.'), { kind: 'auth' }));
+    headers['X-OSINT-API-TOKEN'] = osintApiToken;
+  }
+  const match = path.match(/^\/api\/osint\/investigations\/([^/]+)/);
+  if (match) {
+    const token = investigationTokens.get(decodeURIComponent(match[1]));
+    if (token) headers.Authorization = `Bearer ${token}`;
+  }
+  return fetch(`${apiBase()}${path}`, { ...options, headers }).then(async (response) => {
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw Object.assign(new Error(data.error || `HTTP ${response.status}`), { status: response.status });
     return data;
@@ -214,6 +227,9 @@ async function refreshProviders() {
 async function startInvestigation() {
   const identifiers = $('#osint-identifiers').value.split(/[\n,;]+/).map((value) => value.trim()).filter(Boolean);
   if (!identifiers.length) { $('#osint-run-status').textContent = 'Enter at least one email address or username.'; $('#osint-run-status').className = 'inline-status error'; return; }
+  osintApiToken = $('#osint-api-token').value.trim();
+  if (!osintApiToken) { $('#osint-run-status').textContent = 'Enter the private OSINT access token configured in the Worker.'; $('#osint-run-status').className = 'inline-status error'; $('#osint-api-token').focus(); return; }
+  if (identifiers.length > 10) { $('#osint-run-status').textContent = 'Bulk investigations support at most 10 identifiers.'; $('#osint-run-status').className = 'inline-status error'; return; }
   const providers = [...document.querySelectorAll('input[name="osint-provider"]:checked')].map((input) => input.value);
   $('#osint-run-status').textContent = 'Starting provider jobs…';
   $('#osint-run-status').className = 'inline-status';
@@ -229,6 +245,9 @@ async function startInvestigation() {
       $('#osint-password').value = '';
     }
     active = await request('/api/osint/investigations', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ identifiers, providers, mode: $('#osint-mode').value, password_hash_prefix: passwordHashPrefix, password_hash_suffix: passwordHashSuffix }) });
+    if (typeof active.access_token !== 'string') throw new Error('Worker did not return a private investigation access token.');
+    investigationTokens.set(active.id, active.access_token);
+    delete active.access_token;
     investigationHistory = [active, ...investigationHistory.filter((item) => item.id !== active.id)];
     renderSummary();
     setTab('overview');
