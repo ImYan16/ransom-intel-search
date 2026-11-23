@@ -1,0 +1,4 @@
+maigret==0.6.7
+# Keep the DNS resolver dependencies on releases with Python 3.13 Linux wheels.
+aiodns<4
+pycares<4.10
