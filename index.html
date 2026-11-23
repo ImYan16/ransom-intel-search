@@ -22,6 +22,7 @@
     <nav class="primary-nav" aria-label="Primary">
       <a href="#search">Search</a>
       <a href="#results-heading">Results</a>
+      <button id="open-osint" type="button" class="nav-button">OSINT Investigation</button>
     </nav>
     <div class="header-actions">
       <span class="service-state"><span class="service-indicator" aria-hidden="true"></span>Worker proxy</span>
@@ -32,6 +33,7 @@
   </header>
 
   <main id="main-content">
+    <div id="ransomware-module">
     <section id="search" class="search-section" aria-labelledby="page-title">
       <div class="intro-copy">
         <p class="eyebrow">Public reporting · three independent sources</p>
@@ -125,6 +127,75 @@
       <span>Ransom Intel</span>
       <p>Dates retain their source meaning. Publication or discovery dates are not confirmed intrusion dates.</p>
     </footer>
+    </div>
+
+    <section id="osint-module" class="osint-module" aria-labelledby="osint-title" hidden>
+      <header class="osint-header">
+        <div>
+          <p class="eyebrow">Identity intelligence · authorised providers</p>
+          <h1 id="osint-title">OSINT Investigation</h1>
+          <p class="intro-text">Investigate public email and username identifiers without exposing provider credentials.</p>
+        </div>
+        <div class="osint-header-actions">
+          <button id="osint-new" class="button button-primary" type="button">New investigation</button>
+          <button id="osint-refresh" class="button button-secondary" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <nav class="osint-tabs" aria-label="OSINT sections" role="tablist">
+        <button type="button" role="tab" aria-selected="true" data-osint-tab="overview">Overview</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="new">New Investigation</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="email">Email Intelligence</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="username">Username Intelligence</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="breaches">Breach Intelligence</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="exposure">Infostealer Exposure</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="relationships">Identity Relationships</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="timeline">Investigation Timeline</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="history">Investigation History</button>
+        <button type="button" role="tab" aria-selected="false" data-osint-tab="reports">Reports</button>
+      </nav>
+
+      <div class="osint-workspace">
+        <section id="osint-overview" class="osint-panel" role="tabpanel" aria-labelledby="osint-title">
+          <div class="osint-section-heading"><div><p class="eyebrow">Workspace</p><h2>Investigation overview</h2></div><span id="osint-investigation-id" class="mono-copy">No active investigation</span></div>
+          <div id="osint-summary" class="osint-summary"><article class="metric-card"><span>Status</span><strong>Idle</strong></article></div>
+          <div id="osint-provider-status" class="status-grid"></div>
+        </section>
+
+        <section id="osint-new-panel" class="osint-panel" role="tabpanel" hidden>
+          <div class="osint-section-heading"><div><p class="eyebrow">Create</p><h2>New investigation</h2></div></div>
+          <form id="osint-form" class="osint-form">
+            <label class="control-field osint-wide"><span>Identifiers</span><textarea id="osint-identifiers" rows="5" placeholder="analyst@example.com&#10;username123&#10;second@example.org" aria-describedby="osint-input-help"></textarea></label>
+            <p id="osint-input-help" class="field-hint">Enter one email address or username per line. A maximum of 100 identifiers is supported.</p>
+            <div class="osint-form-grid">
+              <fieldset class="provider-options"><legend>Providers</legend>
+                <label class="check-control"><input type="checkbox" name="osint-provider" value="hibp" checked><span>Have I Been Pwned</span></label>
+                <label class="check-control"><input type="checkbox" name="osint-provider" value="dns" checked><span>DNS / MX</span></label>
+                <label class="check-control"><input type="checkbox" name="osint-provider" value="github" checked><span>GitHub public profiles</span></label>
+                <label class="check-control"><input type="checkbox" name="osint-provider" value="maigret"><span>Maigret worker</span></label>
+                <label class="check-control"><input type="checkbox" name="osint-provider" value="infostealer"><span>Infostealer provider</span></label>
+              </fieldset>
+              <label class="control-field"><span>Investigation mode</span><select id="osint-mode"><option value="standard">Standard</option><option value="extended">Extended</option><option value="bulk">Bulk investigation</option></select></label>
+            </div>
+            <input id="osint-import" type="file" accept=".csv,.json,text/csv,application/json" hidden>
+            <div class="settings-actions"><button class="button button-secondary" id="osint-import-button" type="button">Import CSV / JSON</button><button class="button button-primary" type="submit">Start investigation</button></div>
+            <p id="osint-run-status" class="inline-status" role="status" aria-live="polite"></p>
+          </form>
+        </section>
+
+        <section id="osint-results" class="osint-panel" role="tabpanel" hidden>
+          <div class="osint-section-heading"><div><p class="eyebrow">Findings</p><h2 id="osint-results-title">Results</h2></div>
+            <div class="results-actions"><button id="osint-export-json" class="button button-secondary" type="button" disabled>Export JSON</button><button id="osint-export-csv" class="button button-secondary" type="button" disabled>Export CSV</button><button id="osint-export-html" class="button button-secondary" type="button" disabled>Export HTML</button><button id="osint-export-pdf" class="button button-secondary" type="button" disabled>Print / PDF</button></div>
+          </div>
+          <div id="osint-table-wrap" class="table-wrap" tabindex="0" role="region" aria-label="OSINT findings"><table><thead id="osint-table-head"></thead><tbody id="osint-table-body"></tbody></table></div>
+        </section>
+
+        <section id="osint-graph-panel" class="osint-panel" role="tabpanel" hidden>
+          <div class="osint-section-heading"><div><p class="eyebrow">Correlated identities</p><h2>Relationship graph</h2></div></div>
+          <div id="osint-graph" class="relationship-graph" role="img" aria-label="Investigation relationship graph"><p class="empty-copy">No relationship data yet.</p></div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <dialog id="detail-dialog" aria-labelledby="detail-dialog-title">
@@ -153,6 +224,12 @@
       <h3 id="defaults-title">Search defaults</h3>
       <label class="control-field settings-field"><span>Results per page</span><select id="default-page-size"><option>25</option><option>50</option><option>100</option></select></label>
       <label class="control-field settings-field"><span>Default sorting</span><select id="default-sort"><option value="relevance">Relevance</option><option value="newest">Discovery date · newest</option><option value="victim">Victim name · A–Z</option></select></label>
+    </section>
+    <section class="settings-section" aria-labelledby="osint-providers-title">
+      <h3 id="osint-providers-title">OSINT Providers</h3>
+      <p class="settings-copy">Provider credentials are worker secrets. Secret values are never returned to this browser.</p>
+      <button id="osint-provider-refresh" class="button button-secondary" type="button">Check provider configuration</button>
+      <div id="osint-provider-settings" class="provider-settings" role="status" aria-live="polite">Not checked</div>
     </section>
   </dialog>
 

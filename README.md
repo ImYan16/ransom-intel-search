@@ -55,3 +55,44 @@ Run `npm test` for browser-to-Worker adapter routing, Worker CORS policy, Pro se
 - [RansomFeed API docs](https://ransomfeed.it/docs/#api-html)
 - [Ransomware.live Pro API docs](https://api-pro.ransomware.live/docs)
 - [Cloudflare Worker secrets](https://developers.cloudflare.com/workers/configuration/secrets/)
+
+## OSINT Investigation
+
+The static frontend includes a separate OSINT workspace for email addresses and usernames. It calls only the same Cloudflare Worker origin. Investigation history is temporary in Worker memory and is reset by a Worker restart or deployment.
+
+### OSINT provider configuration
+
+Configure provider credentials with `npx wrangler secret put <NAME> --config worker/wrangler.toml`.
+
+- `HIBP_API_KEY` — Have I Been Pwned API v3 key. Required for real breach searches.
+- `GITHUB_API_TOKEN` — optional GitHub API token for public profile lookups and higher limits.
+- `GITHUB_DISPATCH_TOKEN` — GitHub fine-grained token with repository Actions write permission for Maigret dispatches.
+- `MAIGRET_REPOSITORY` — repository in `owner/repository` format that contains `.github/workflows/maigret.yml`.
+- `MAIGRET_CALLBACK_SECRET` — optional secret for the secured Maigret callback endpoint.
+- `MAIGRET_CALLBACK_URL` — reserved callback configuration; callback authentication is not forwarded as a workflow secret in the dispatch payload.
+- `HUDSON_ROCK_API_URL` — optional authorised infostealer metadata API URL.
+- `HUDSON_ROCK_API_KEY` — optional authorised infostealer metadata API key.
+- `OSINT_API_TOKEN` — optional bearer token that protects OSINT investigation endpoints. When set, browser clients must provide it; this is not recommended for public static GitHub Pages unless the same secret is intentionally exposed through a different private client.
+
+For Maigret, the Worker dispatches `maigret-investigation` through GitHub Actions. The workflow uses the Python package in a hosted runner and uploads private JSON/artifact output for seven days. Because public callback delivery can be credential-expensive and unsafe, the callback endpoint exists for an authorized private integration and the artifact workflow is the documented default alternative. Never put GitHub or provider tokens in `src/config.js` or HTML.
+
+The infostealer module has no synthetic data fallback. It remains unavailable until an authorised API URL and key are configured. Only metadata is accepted; no password, cookie, session token, or raw log fields are displayed or cached.
+
+### OSINT API namespace
+
+- `POST /api/osint/investigations`
+- `GET /api/osint/investigations`
+- `GET /api/osint/investigations/:id`
+- `GET /api/osint/investigations/:id/status`
+- `GET /api/osint/investigations/:id/accounts`
+- `GET /api/osint/investigations/:id/breaches`
+- `GET /api/osint/investigations/:id/exposures`
+- `GET /api/osint/investigations/:id/timeline`
+- `GET /api/osint/investigations/:id/graph`
+- `GET /api/osint/investigations/:id/evidence`
+- `POST /api/osint/investigations/:id/export`
+- `DELETE /api/osint/investigations/:id`
+- `GET /api/osint/providers`
+- `POST /api/osint/maigret/callback`
+
+All provider cache and investigation storage is separate from the ransomware source cache. The Worker currently uses temporary in-memory storage and does not require D1. Persistent history requires a future D1 binding.
