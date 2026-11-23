@@ -1,0 +1,42 @@
+name: Maigret OSINT Investigation
+
+on:
+  repository_dispatch:
+    types: [maigret-investigation]
+  workflow_dispatch:
+    inputs:
+      investigation_id:
+        description: Investigation identifier
+        required: true
+      username:
+        description: Public username to enumerate
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Maigret
+        run: python -m pip install --upgrade maigret
+      - name: Run Maigret
+        id: maigret
+        shell: bash
+        run: |
+          set -e
+          INVESTIGATION_ID="${{ github.event.client_payload.investigation_id || github.event.inputs.investigation_id }}"
+          USERNAME="${{ github.event.client_payload.username || github.event.inputs.username }}"
+          mkdir -p artifacts
+          maigret "$USERNAME" --json simple --folderoutput artifacts
+      - name: Upload private scan artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maigret-${{ github.event.client_payload.investigation_id || github.event.inputs.investigation_id }}
+          path: artifacts/
+          retention-days: 7
