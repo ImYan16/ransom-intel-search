@@ -11,11 +11,11 @@ Live checks on 20 Nov 2026 found the upstream APIs did not return the CORS heade
 
 ## Source adapters
 
-- **RansomLook:** `GET https://www.ransomlook.io/api/search?query=…`; falls back to observed `q` parameter if the documented parameter is rejected. Maps post title, group, discovery timestamp, optional description, link, and screenshot. Discovery is not an attack date.
-- **RansomFeed:** `GET https://api.ransomfeed.it/search/{term}/offset/1000`. If that API returns no matches, the Worker checks RansomFeed’s public site-search endpoint for newer posts that have not reached the documented API yet. Search includes victim, description, city, region, and sector. The documented API rate limit is 5 requests/minute per IP.
-- **Ransomware.live Pro:** `GET https://api-pro.ransomware.live/victims/search?q=…`, authenticated with `X-API-KEY` from the Worker secret binding.
+- **RansomLook:** `GET https://www.ransomlook.io/api/search?query=…`; falls back to observed `q` parameter if the documented parameter is rejected. Maps post title, group, discovery timestamp, country when supplied, optional description, link, and screenshot. Discovery is not an attack date.
+- **RansomFeed:** `GET https://api.ransomfeed.it/search/{term}/offset/1000`, combined with RansomFeed’s public site-search endpoint on every search so newer posts are included even when the documented API is behind. Matching records are deduplicated by post ID; recent site-only records get their `Descrizione` from the linked post page. Search includes victim, description, city, region, and sector. The documented API rate limit is 5 requests/minute per IP.
+- **Ransomware.live Pro:** `GET https://api-pro.ransomware.live/victims/search?q=…`, authenticated with `X-API-KEY` from the Worker secret binding. Maps the country value returned by Pro.
 
-Missing fields stay null and render as “Not Available”. Attack, discovery, publication, and update dates remain separate. A ransomware group’s post is an unverified claim, not confirmed proof of breach. Source raw responses are retained per record for traceability.
+Country is shown per source in the results table and each source record’s details. Missing country values stay null and display as “Not available”; the app does not infer a provider’s country from another source. Attack, discovery, publication, and update dates remain separate. A ransomware group’s post is an unverified claim, not confirmed proof of breach. Source raw responses are retained per record for traceability.
 
 ## Features
 
@@ -23,8 +23,8 @@ Missing fields stay null and render as “Not Available”. Attack, discovery, p
 - Exact victim-name option, normalized records, conservative cross-source matching, and preserved source-specific records.
 - Country, industry, group, source, date, match status, evidence, and website filters.
 - Victim detail dialog, source links, screenshot previews, copyable website/domain, pagination, and CSV/JSON exports.
-- Five-minute browser cache per source/query, force refresh, and cache clearing.
-- Worker in-memory cache and per-client request limit; upstream API rate limits still apply.
+- Successful search results are cached by source and query for one minute in the browser and Worker. Refresh bypasses both caches and replaces them with the latest successful response.
+- Per-client Worker request limit and upstream API rate limits still apply; each provider can have its own publication delay.
 - No browser-held API key and no permanent search history.
 
 ## Deploy the free Worker
@@ -37,7 +37,7 @@ Cloudflare Workers Free includes a daily request allowance; see the current [Wor
 4. Deploy: `npx wrangler deploy --config worker/wrangler.toml`. Copy the resulting `workers.dev` URL.
 5. Put that URL in `src/config.js` as `window.RI_CONFIG.apiBase`, then push the change. The URL is public; it contains no credential.
 
-The Worker has a 60-request/minute per-client guard, 12-second upstream timeouts, one retry for transient failures, and a five-minute in-memory success cache. Provider rate limits remain in force. The Pro secret is configured in Cloudflare and must never be added to `src/config.js` or GitHub Pages.
+The Worker has a 60-request/minute per-client guard, 12-second upstream timeouts, one retry for transient failures, and a one-minute in-memory success cache. Searches reuse successful cached results for up to one minute; Refresh bypasses both caches, queries each provider's current search endpoint, and replaces the cache on success. Providers can still lag their own websites or feeds; check a provider's live feed when confirming its newest overall record. Provider rate limits remain in force. The Pro secret is configured in Cloudflare and must never be added to `src/config.js` or GitHub Pages.
 
 ## Deploy GitHub Pages
 
