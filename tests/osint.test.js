@@ -5,12 +5,13 @@ import {isValidEmail, normalizeUsername} from '../worker/src/osint.js';
 
 const env = {
   ALLOWED_ORIGINS: 'https://analyst.github.io',
+  OSINT_API_TOKEN: 'test-osint-api-token-with-at-least-32-characters',
   HIBP_API_KEY: '00000000000000000000000000000000',
   GITHUB_API_TOKEN: 'github-test-secret',
 };
-const request = (path, method = 'GET', body, origin = 'https://analyst.github.io') => new Request(`https://worker.test${path}`, {
+const request = (path, method = 'GET', body, origin = 'https://analyst.github.io', extraHeaders = {}) => new Request(`https://worker.test${path}`, {
   method,
-  headers: { Origin: origin, 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.44', ...(body ? {} : {}) },
+  headers: { Origin: origin, 'content-type': 'application/json', 'CF-Connecting-IP': '192.0.2.44', 'X-OSINT-API-TOKEN': env.OSINT_API_TOKEN, ...extraHeaders },
   body: body ? JSON.stringify(body) : undefined,
 });
 
@@ -92,6 +93,7 @@ test('Maigret dispatch can remain pending and is never marked complete too early
       identifiers: ['sample_username'],
       providers: ['maigret'],
     }), {
+      ...env,
       ALLOWED_ORIGINS: env.ALLOWED_ORIGINS,
       GITHUB_DISPATCH_TOKEN: 'dispatch-test-secret',
       MAIGRET_REPOSITORY: 'owner/repository',
@@ -103,4 +105,59 @@ test('Maigret dispatch can remain pending and is never marked complete too early
   } finally {
     globalThis.fetch = oldFetch;
   }
+});
+
+test('investigation creation requires a configured private API token', async () => {
+  const body = { identifiers: ['sample_user'], providers: [] };
+  const unauthorized = await worker.fetch(request('/api/osint/investigations', 'POST', body, undefined, { 'X-OSINT-API-TOKEN': 'wrong-token' }), env);
+  assert.equal(unauthorized.status, 401);
+  const unconfigured = await worker.fetch(request('/api/osint/investigations', 'POST', body), {
+    ALLOWED_ORIGINS: env.ALLOWED_ORIGINS,
+  });
+  assert.equal(unconfigured.status, 503);
+  const weak = await worker.fetch(request('/api/osint/investigations', 'POST', body), {
+    ALLOWED_ORIGINS: env.ALLOWED_ORIGINS,
+    OSINT_API_TOKEN: 'short',
+  });
+  assert.equal(weak.status, 503);
+  const tooMany = await worker.fetch(request('/api/osint/investigations', 'POST', {
+    identifiers: Array.from({ length: 11 }, (_, index) => `user_${index}`),
+    providers: [],
+  }), env);
+  assert.equal(tooMany.status, 400);
+});
+
+test('investigation access is scoped to its private creation token and cannot be listed', async () => {
+  const body = { identifiers: ['owner_user'], providers: [] };
+  const createdResponse = await worker.fetch(request('/api/osint/investigations', 'POST', body, undefined, { 'CF-Connecting-IP': '198.51.100.11' }), env);
+  const created = await createdResponse.json();
+  assert.equal(createdResponse.status, 201);
+  assert.equal(typeof created.access_token, 'string');
+
+  const list = await worker.fetch(request('/api/osint/investigations'), env);
+  assert.equal(list.status, 405);
+  const unauthorized = await worker.fetch(request(`/api/osint/investigations/${created.id}`), env);
+  assert.equal(unauthorized.status, 404);
+  const unauthorizedDelete = await worker.fetch(request(`/api/osint/investigations/${created.id}`, 'DELETE'), env);
+  assert.equal(unauthorizedDelete.status, 404);
+
+  const ownerHeaders = { Authorization: `Bearer ${created.access_token}` };
+  const owned = await worker.fetch(request(`/api/osint/investigations/${created.id}`, 'GET', undefined, undefined, ownerHeaders), env);
+  const ownedData = await owned.json();
+  assert.equal(owned.status, 200);
+  assert.equal(ownedData.id, created.id);
+  assert.equal(Object.hasOwn(ownedData, 'access_token'), false);
+
+  const deleted = await worker.fetch(request(`/api/osint/investigations/${created.id}`, 'DELETE', undefined, undefined, ownerHeaders), env);
+  assert.equal(deleted.status, 200);
+});
+
+test('OSINT investigation creation is rate limited per client', async () => {
+  const ip = '198.51.100.12';
+  const body = { identifiers: ['rate_limit_user'], providers: [] };
+  const responses = [];
+  for (let index = 0; index < 4; index += 1) {
+    responses.push(await worker.fetch(request('/api/osint/investigations', 'POST', body, undefined, { 'CF-Connecting-IP': ip }), env));
+  }
+  assert.deepEqual(responses.map((response) => response.status), [201, 201, 201, 429]);
 });
