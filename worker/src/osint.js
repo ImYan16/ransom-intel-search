@@ -140,6 +140,7 @@ function providerError(investigationId, type, identifier, provider, error) {
 
 async function hibpEmail(email, investigationId, env) {
   if (!env.HIBP_API_KEY) return providerResult(investigationId, 'breach', email, 'Have I Been Pwned account search', { status: 'DISABLED', metadata: { reason: 'Requires HIBP_API_KEY for account-breach searches' } });
+  if (!/^[A-Fa-f0-9]{32}$/.test(env.HIBP_API_KEY.trim())) return providerResult(investigationId, 'breach', email, 'Have I Been Pwned account search', { status: 'ERROR', metadata: { reason: 'HIBP_API_KEY must be a 32-character hexadecimal API key' } });
   const cacheKey = `hibp:${email}`;
   let breaches = cacheGet(cacheKey);
   if (!breaches) {
@@ -179,15 +180,173 @@ async function dnsEmail(email, investigationId) {
   const domain = email.split('@')[1];
   if (!domain) return [];
   try {
-    const mx = await safeJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`);
+    const [mx, spf, dmarc] = await Promise.all([
+      safeJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=MX`),
+      safeJson(`https://dns.google/resolve?name=${encodeURIComponent(domain)}&type=TXT`),
+      safeJson(`https://dns.google/resolve?name=_dmarc.${encodeURIComponent(domain)}&type=TXT`),
+    ]);
+    const txt = [...(spf.Answer || []), ...(dmarc.Answer || [])].map((answer) => answer.data).filter(Boolean);
     return [providerResult(investigationId, 'domain', email, 'DNS-over-HTTPS', {
       status: mx.Answer?.length ? 'FOUND' : 'NOT_FOUND',
       confidence: mx.Answer?.length ? 100 : 60,
       source_url: `https://dns.google/query?name=${encodeURIComponent(domain)}&rr_type=MX`,
-      metadata: { domain, mx: mx.Answer?.map((answer) => answer.data).filter(Boolean) || [] },
+      metadata: {
+        domain,
+        mx: mx.Answer?.map((answer) => answer.data).filter(Boolean) || [],
+        txt_records: txt,
+        has_spf: txt.some((record) => /spf1/i.test(record)),
+        has_dmarc: txt.some((record) => /v=dmarc1/i.test(record)),
+      },
     })];
   } catch (error) {
     return [providerError(investigationId, 'domain', email, 'DNS-over-HTTPS', error)];
+  }
+
+  async function gravatarEmail(email, investigationId) {
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(email.trim().toLowerCase())))]
+      .map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    const cacheKey = `gravatar:${hash}`;
+    let profile = cacheGet(cacheKey);
+    if (!profile) {
+      try {
+        profile = await safeJson(`https://en.gravatar.com/${hash}.json`);
+        cacheSet(cacheKey, profile, 6 * 60 * 60 * 1000);
+      } catch (error) {
+        if (error.status === 404) return [providerResult(investigationId, 'social_account', email, 'Gravatar', {
+          platform: 'Gravatar',
+          status: 'NOT_FOUND',
+          confidence: 100,
+          source_url: `https://gravatar.com/${hash}`,
+        })];
+        return [providerError(investigationId, 'social_account', email, 'Gravatar', error)];
+      }
+    }
+    const entry = Array.isArray(profile.entry) ? profile.entry[0] : null;
+    if (!entry) return [providerResult(investigationId, 'social_account', email, 'Gravatar', {
+      platform: 'Gravatar',
+      status: 'NOT_FOUND',
+      confidence: 100,
+      source_url: `https://gravatar.com/${hash}`,
+    })];
+    const account = entry.accounts?.[0] || {};
+    return [providerResult(investigationId, 'social_account', email, 'Gravatar', {
+      platform: 'Gravatar',
+      display_name: entry.displayName || entry.name?.formatted || null,
+      profile_url: entry.profileUrl || account.url || `https://gravatar.com/${hash}`,
+      source_url: entry.profileUrl || account.url || `https://gravatar.com/${hash}`,
+      status: 'FOUND',
+      confidence: 80,
+      metadata: {
+        avatar_url: entry.thumbnailUrl || null,
+        location: entry.currentLocation || null,
+        biography: entry.aboutMe || null,
+        accounts: entry.accounts || [],
+      },
+    })];
+  }
+
+  async function rdapDomain(email, investigationId) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) return [];
+    const cacheKey = `rdap:${domain}`;
+    let rdap = cacheGet(cacheKey);
+    try {
+      if (!rdap) {
+        rdap = await safeJson(`https://rdap.org/domain/${encodeURIComponent(domain)}`);
+        cacheSet(cacheKey, rdap, 24 * 60 * 60 * 1000);
+      }
+    } catch (error) {
+      if (error.status === 404) return [providerResult(investigationId, 'domain', email, 'RDAP', {
+        status: 'NOT_FOUND',
+        confidence: 90,
+        source_url: `https://rdap.org/domain/${encodeURIComponent(domain)}`,
+        metadata: { domain },
+      })];
+      return [providerError(investigationId, 'domain', email, 'RDAP', error)];
+    }
+    const registration = rdap.events?.find((event) => event.eventAction === 'registration');
+    const nameservers = rdap.nameservers?.map((server) => server.ldhName).filter(Boolean) || [];
+    return [providerResult(investigationId, 'domain', email, 'RDAP', {
+      platform: 'Domain registration',
+      status: 'FOUND',
+      confidence: 95,
+      source_url: `https://rdap.org/domain/${encodeURIComponent(domain)}`,
+      first_seen: registration?.eventDate || null,
+      metadata: {
+        domain,
+        registrar: rdap.entities?.find((entity) => entity.roles?.includes('registrar'))?.vcardArray?.[1]?.find((item) => item[0] === 'fn')?.[3] || null,
+        nameservers,
+        status: rdap.status || [],
+      },
+    })];
+  }
+
+  async function certificateRecords(email, investigationId) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) return [];
+    const cacheKey = `crt:${domain}`;
+    let records = cacheGet(cacheKey);
+    try {
+      if (!records) {
+        records = await safeJson(`https://crt.sh/?q=${encodeURIComponent(`%.${domain}`)}&output=json`);
+        cacheSet(cacheKey, records, 24 * 60 * 60 * 1000);
+      }
+    } catch (error) {
+      return [providerError(investigationId, 'domain', email, 'Certificate Transparency', error)];
+    }
+    const uniqueNames = [...new Set((Array.isArray(records) ? records : [])
+      .flatMap((record) => String(record.name_value || '').split('\n'))
+      .map((name) => name.trim().toLowerCase())
+      .filter((name) => name && (name === domain || name.endsWith(`.${domain}`))))].slice(0, 100);
+    if (!uniqueNames.length) return [providerResult(investigationId, 'domain', email, 'Certificate Transparency', {
+      status: 'NOT_FOUND',
+      confidence: 70,
+      source_url: `https://crt.sh/?q=${encodeURIComponent(`%.${domain}`)}&output=json`,
+      metadata: { domain },
+    })];
+    return [providerResult(investigationId, 'domain', email, 'Certificate Transparency', {
+      status: 'FOUND',
+      confidence: 85,
+      source_url: `https://crt.sh/?q=${encodeURIComponent(`%.${domain}`)}&output=json`,
+      metadata: { domain, certificate_names: uniqueNames, unique_name_count: uniqueNames.length },
+    })];
+  }
+
+  async function waybackDomain(email, investigationId) {
+    const domain = email.split('@')[1]?.toLowerCase();
+    if (!domain) return [];
+    const cacheKey = `wayback:${domain}`;
+    let rows = cacheGet(cacheKey);
+    try {
+      if (!rows) {
+        const response = await fetch(`https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(`*.${domain}/*`)}&output=json&filter=statuscode:200&filter=mimetype:text/html&limit=20&collapse=urlkey`, {
+          headers: { 'user-agent': 'Ransom-Intel-Search' },
+          signal: AbortSignal.timeout(12000),
+        });
+        if (!response.ok) throw Object.assign(new Error(`Provider HTTP ${response.status}`), { status: response.status });
+        rows = await response.json();
+        cacheSet(cacheKey, rows, 24 * 60 * 60 * 1000);
+      }
+    } catch (error) {
+      return [providerError(investigationId, 'archive', email, 'Internet Archive', error)];
+    }
+    if (!Array.isArray(rows) || rows.length < 2) return [providerResult(investigationId, 'archive', email, 'Internet Archive', {
+      status: 'NOT_FOUND',
+      confidence: 60,
+      source_url: `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(`*.${domain}/*`)}`,
+      metadata: { domain },
+    })];
+    const [, ...captures] = rows;
+    const urls = [...new Set(captures.map((capture) => capture[2]).filter(Boolean))].slice(0, 20);
+    const timestamps = captures.map((capture) => capture[1]).filter(Boolean).sort();
+    return [providerResult(investigationId, 'archive', email, 'Internet Archive', {
+      status: 'FOUND',
+      confidence: 70,
+      source_url: `https://web.archive.org/cdx/search/cdx?url=${encodeURIComponent(`*.${domain}/*`)}`,
+      first_seen: timestamps.length ? `${timestamps[0].slice(0, 4)}-${timestamps[0].slice(4, 6)}-${timestamps[0].slice(6, 8)}` : null,
+      last_seen: timestamps.length ? `${timestamps.at(-1).slice(0, 4)}-${timestamps.at(-1).slice(4, 6)}-${timestamps.at(-1).slice(6, 8)}` : null,
+      metadata: { domain, captured_urls: urls, capture_count: captures.length },
+    })];
   }
 }
 
@@ -312,6 +471,10 @@ async function runInvestigation(investigation, env) {
       if (providers.includes('breach_catalog')) jobs.push({ provider: 'Public breach catalogue', status: 'running', started_at: iso() });
       if (providers.includes('pwned_passwords') && investigation.password_hash_prefix && investigation.password_hash_suffix) jobs.push({ provider: 'HIBP Pwned Passwords', status: 'running', started_at: iso() });
       if (providers.includes('dns')) jobs.push({ provider: 'DNS-over-HTTPS', status: 'running', started_at: iso() });
+      if (providers.includes('gravatar')) jobs.push({ provider: 'Gravatar', status: 'running', started_at: iso() });
+      if (providers.includes('rdap')) jobs.push({ provider: 'RDAP', status: 'running', started_at: iso() });
+      if (providers.includes('certificate')) jobs.push({ provider: 'Certificate Transparency', status: 'running', started_at: iso() });
+      if (providers.includes('wayback')) jobs.push({ provider: 'Internet Archive', status: 'running', started_at: iso() });
       if (providers.includes('github')) jobs.push({ provider: 'GitHub', status: 'running', started_at: iso() });
       if (providers.includes('infostealer')) jobs.push({ provider: 'Infostealer provider', status: 'running', started_at: iso() });
     } else if (identifier.type === 'username') {
@@ -343,6 +506,10 @@ async function runInvestigation(investigation, env) {
       if (providers.includes('breach_catalog')) calls.push(runProvider('Public breach catalogue', () => publicBreachCatalog(identifier.value, investigation.id)));
       if (providers.includes('pwned_passwords') && investigation.password_hash_prefix && investigation.password_hash_suffix) calls.push(runProvider('HIBP Pwned Passwords', () => pwnedPasswords(investigation.password_hash_prefix, investigation.password_hash_suffix, investigation.id, identifier.value)));
       if (providers.includes('dns')) calls.push(runProvider('DNS-over-HTTPS', () => dnsEmail(identifier.value, investigation.id)));
+      if (providers.includes('gravatar')) calls.push(runProvider('Gravatar', () => gravatarEmail(identifier.value, investigation.id)));
+      if (providers.includes('rdap')) calls.push(runProvider('RDAP', () => rdapDomain(identifier.value, investigation.id)));
+      if (providers.includes('certificate')) calls.push(runProvider('Certificate Transparency', () => certificateRecords(identifier.value, investigation.id)));
+      if (providers.includes('wayback')) calls.push(runProvider('Internet Archive', () => waybackDomain(identifier.value, investigation.id)));
       if (providers.includes('infostealer')) calls.push(runProvider('Infostealer provider', () => hudsonRockEmail(identifier.value, investigation.id, env)));
       if (providers.includes('github')) calls.push(runProvider('GitHub', () => githubUsername(identifier.value.split('@')[0], investigation.id, env)));
     } else {
@@ -369,9 +536,13 @@ export async function handleOsint(request, env, url, origin, json) {
     providers: [
       { name: 'HIBP Pwned Passwords', category: 'Password range exposure', enabled: true, configured: true, status: 'available', cost: '$0', method: 'K-anonymity SHA-1 range' },
       { name: 'Public breach catalogue', category: 'Breach metadata', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public catalog metadata' },
-      { name: 'Have I Been Pwned account search', category: 'Breach intelligence', enabled: !!env.HIBP_API_KEY, configured: !!env.HIBP_API_KEY, status: env.HIBP_API_KEY ? 'available' : 'requires_key', cost: 'Paid API subscription', method: 'HIBP API v3' },
+      { name: 'Have I Been Pwned account search', category: 'Breach intelligence', enabled: !!env.HIBP_API_KEY, configured: !!env.HIBP_API_KEY, status: env.HIBP_API_KEY ? 'available' : 'requires_key', cost: env.HIBP_API_KEY === '00000000000000000000000000000000' ? '$0 test key; test accounts only' : 'Paid API subscription', method: 'HIBP API v3' },
       { name: 'GitHub', category: 'Public profile', enabled: true, configured: true, status: 'available', cost: '$0 public tier', method: 'Public API' },
       { name: 'DNS-over-HTTPS', category: 'Email domain', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Google DNS JSON' },
+      { name: 'Gravatar', category: 'Email profile', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public profile JSON' },
+      { name: 'RDAP', category: 'Domain registration', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public RDAP registry' },
+      { name: 'Certificate Transparency', category: 'Domain infrastructure', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public crt.sh records' },
+      { name: 'Internet Archive', category: 'Historical observations', enabled: true, configured: true, status: 'available', cost: '$0', method: 'Public CDX API' },
       { name: 'Maigret', category: 'Username enumeration', enabled: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, configured: !!env.GITHUB_DISPATCH_TOKEN && !!env.MAIGRET_REPOSITORY, status: env.GITHUB_DISPATCH_TOKEN && env.MAIGRET_REPOSITORY ? 'available' : 'disabled', cost: '$0 within GitHub Actions limits', method: 'GitHub Actions + Python' },
       { name: 'Infostealer provider', category: 'Exposure metadata', enabled: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, configured: !!env.HUDSON_ROCK_API_URL && !!env.HUDSON_ROCK_API_KEY, status: env.HUDSON_ROCK_API_URL && env.HUDSON_ROCK_API_KEY ? 'available' : 'requires_paid_subscription', cost: 'Optional paid/licensed', method: 'Authorised metadata API' },
     ],
@@ -388,8 +559,10 @@ export async function handleOsint(request, env, url, origin, json) {
     }
     if (!identifiers.length) return json({ error: 'Provide at least one valid email address or username' }, 400, origin, env);
     if (identifiers.length > 100) return json({ error: 'Bulk investigations support at most 100 identifiers' }, 400, origin, env);
-    const available = ['hibp', 'dns', 'github', 'maigret', 'infostealer', 'breach_catalog', 'pwned_passwords'];
-    const providers = Array.isArray(body.providers) ? [...new Set(body.providers.filter((provider) => available.includes(provider)))] : ['dns', 'github', 'breach_catalog'];
+    const available = ['hibp', 'dns', 'github', 'maigret', 'infostealer', 'breach_catalog', 'pwned_passwords', 'gravatar', 'rdap', 'certificate', 'wayback'];
+    const providers = Array.isArray(body.providers)
+      ? [...new Set(body.providers.filter((provider) => available.includes(provider)))]
+      : ['dns', 'github', 'breach_catalog', 'gravatar', 'rdap', 'certificate', 'wayback'];
     const investigation = {
       id: randomId(),
       mode: ['standard', 'extended', 'bulk'].includes(body.mode) ? body.mode : 'standard',
